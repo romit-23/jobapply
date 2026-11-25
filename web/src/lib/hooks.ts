@@ -242,7 +242,9 @@ export interface ActiveTaskMap {
  *  workspace state (status, artifacts, fit score) without the user
  *  having to refresh.
  */
-export function useActiveTasks(): ActiveTaskMap {
+export function useActiveTasks(
+  { invalidateOnFinish = false }: { invalidateOnFinish?: boolean } = {},
+): ActiveTaskMap {
   const qc = useQueryClient();
   const previousIdsRef = useRef<Set<string>>(new Set());
 
@@ -316,7 +318,11 @@ export function useActiveTasks(): ActiveTaskMap {
   // Detect terminal transitions: any id present in the previous
   // active set that's no longer active means the task finished, so
   // refresh dependent caches.
+  // Only one subscriber (the Layout) should do this. Every JobCard also
+  // calls this hook, and N cards each invalidating ``jobs`` on the same
+  // transition caused a burst of /api/jobs refetches after each task.
   useEffect(() => {
+    if (!invalidateOnFinish) return;
     const currentIds = new Set(result.all.map((t) => t.task_id));
     const prevIds = previousIdsRef.current;
     let didFinish = false;
@@ -332,7 +338,7 @@ export function useActiveTasks(): ActiveTaskMap {
       qc.invalidateQueries({ queryKey: queryKeys.searches });
     }
     previousIdsRef.current = currentIds;
-  }, [result.all, qc]);
+  }, [result.all, qc, invalidateOnFinish]);
 
   return result;
 }

@@ -16,6 +16,7 @@ SPA's client-side router can handle it.
 from __future__ import annotations
 
 import json
+import threading
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -184,11 +185,17 @@ class ServerContext:
         self.workspace_path = workspace_path
         self.task_manager = task_manager
         self._workspace: Workspace | None = None
+        # The SPA fires several API calls at once on first load; without
+        # this lock two threadpool workers can both run ``create_all``
+        # and the loser fails with "table workspace_jobs already exists".
+        self._workspace_lock = threading.Lock()
 
     @property
     def workspace(self) -> Workspace:
         if self._workspace is None:
-            self._workspace = Workspace.open(self.workspace_path)
+            with self._workspace_lock:
+                if self._workspace is None:
+                    self._workspace = Workspace.open(self.workspace_path)
         return self._workspace
 
     def reset_workspace(self) -> None:
