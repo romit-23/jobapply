@@ -20,8 +20,8 @@ PROVIDER_NAMES: tuple[ProviderName, ...] = (
 )
 
 DEFAULT_MODELS: dict[str, str] = {
-    "gemini": "gemini-2.0-flash",
-    "anthropic": "claude-3-5-haiku-latest",
+    "gemini": "gemini-flash-latest",
+    "anthropic": "claude-haiku-5-5",
     "openai": "gpt-4o-mini",
     "ollama": "llama3.1",
     # Workers AI's OpenAI-compatible endpoint accepts any model id from

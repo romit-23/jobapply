@@ -11,7 +11,7 @@ provider = "gemini"
 
 # Optional: override the active provider's model. If omitted, the provider's
 # own [providers.<name>].model is used.
-# model = "gemini-2.0-flash"
+# model = "gemini-flash-latest"
 
 min_fit = 0.35
 results_wanted = 30
@@ -40,12 +40,12 @@ output_dir = "output"
 [providers.gemini]
 # api_key = "env:GOOGLE_API_KEY"
 # api_key = "AIza..."
-model = "gemini-2.0-flash"
+model = "gemini-flash-latest"
 
 [providers.anthropic]
 # api_key = "env:ANTHROPIC_API_KEY"
 # api_key = "sk-ant-..."
-model = "claude-3-5-haiku-latest"
+model = "claude-haiku-5-5"
 
 [providers.openai]
 # api_key = "env:OPENAI_API_KEY"

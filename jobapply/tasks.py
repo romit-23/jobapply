@@ -124,7 +124,10 @@ class TaskHandle:
 
     def is_cancelled(self) -> bool:
         with self._manager._lock:
-            return self._record.status == TaskStatus.cancelled
+            return (
+                self._record.task_id in self._manager._cancel_requested
+                or self._record.status == TaskStatus.cancelled
+            )
 
 
 class TaskManager:
@@ -133,6 +136,11 @@ class TaskManager:
     def __init__(self, max_records: int = 200) -> None:
         self._tasks: dict[str, TaskRecord] = {}
         self._threads: dict[str, threading.Thread] = {}
+        # Running tasks the user asked to stop. They stay ``running`` until
+        # the worker actually returns, so the UI keeps polling and picks up
+        # work that finished after the request (e.g. the in-flight job of a
+        # batch) instead of showing a stale "cancelled" snapshot.
+        self._cancel_requested: set[str] = set()
         self._lock = threading.Lock()
         self._max_records = max_records
 
@@ -161,14 +169,20 @@ class TaskManager:
 
         def _runner() -> None:
             with self._lock:
+                if record.status == TaskStatus.cancelled:
+                    record.finished_at = datetime.now(UTC)
+                    return  # cancelled before it started
                 record.status = TaskStatus.running
                 record.started_at = datetime.now(UTC)
             try:
                 result = fn(handle)
                 with self._lock:
-                    if record.status != TaskStatus.cancelled:
+                    record.result = result if isinstance(result, dict) else None
+                    if record.task_id in self._cancel_requested:
+                        record.status = TaskStatus.cancelled
+                        record.progress.label = "Cancelled."
+                    else:
                         record.status = TaskStatus.succeeded
-                        record.result = result if isinstance(result, dict) else None
             except Exception as exc:  # noqa: BLE001 - surface anything to the UI
                 tb = traceback.format_exc()
                 with self._lock:
@@ -176,6 +190,7 @@ class TaskManager:
                     record.error = f"{exc}\n{tb}"
             finally:
                 with self._lock:
+                    self._cancel_requested.discard(record.task_id)
                     record.finished_at = datetime.now(UTC)
 
         thread = threading.Thread(target=_runner, daemon=True, name=f"task-{kind}")
@@ -189,15 +204,26 @@ class TaskManager:
             return self._tasks.get(task_id)
 
     def cancel(self, task_id: str) -> bool:
-        """Mark the task as cancelled. Cooperative — the task fn must
-        check :meth:`TaskHandle.is_cancelled` to actually stop."""
+        """Request cancellation. Cooperative — the task fn must check
+        :meth:`TaskHandle.is_cancelled` to stop. A running task keeps the
+        ``running`` status (labelled "Cancelling…") until its worker returns,
+        then becomes ``cancelled``; a task that hasn't started is cancelled
+        immediately."""
         with self._lock:
             record = self._tasks.get(task_id)
             if record is None:
                 return False
-            if record.status in {TaskStatus.succeeded, TaskStatus.failed}:
+            if record.status in {
+                TaskStatus.succeeded,
+                TaskStatus.failed,
+                TaskStatus.cancelled,
+            }:
                 return False
-            record.status = TaskStatus.cancelled
+            if record.status == TaskStatus.pending:
+                record.status = TaskStatus.cancelled
+                return True
+            self._cancel_requested.add(task_id)
+            record.progress.label = "Cancelling — finishing the current step…"
             return True
 
     def list_recent(self, limit: int = 50) -> list[TaskRecord]:

@@ -287,3 +287,43 @@ def test_pdflatex_cannot_embed_files_outside_job_dir(tmp_path: Path) -> None:
         "\\documentclass{article}\\begin{document}hello\\end{document}\n", encoding="utf-8"
     )
     assert render._tex_to_pdf_pdflatex(ok, job) == job / "ok.pdf"
+
+
+def test_latex_log_errors_extracts_line_numbers(tmp_path: Path) -> None:
+    log = tmp_path / "resume.log"
+    log.write_text(
+        "This is pdfTeX\n"
+        "! Undefined control sequence.\n"
+        "l.12 \\undefinedmacroxyz\n"
+        "                       {\n"
+        "! Missing $ inserted.\n"
+        "<inserted text>\n"
+        "l.40 a_b\n",
+        encoding="utf-8",
+    )
+    out = render.latex_log_errors(log)
+    assert out is not None
+    assert out.splitlines()[0].startswith("Line 12: Undefined control sequence.")
+    assert "Missing $" not in out  # cascades are summarised, not listed
+    assert "(+1 more" in out
+    assert "Line 40: Missing $ inserted." in (render.latex_log_errors(log, max_errors=2) or "")
+    assert render.latex_log_errors(tmp_path / "missing.log") is None
+
+
+def test_pdflatex_success_removes_byproducts(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import subprocess
+
+    tex = tmp_path / "resume.tex"
+    tex.write_text("x", encoding="utf-8")
+
+    def fake_run(cmd: list[str], **_k: Any) -> subprocess.CompletedProcess[str]:
+        for ext in (".pdf", ".aux", ".log", ".out"):
+            (tmp_path / f"resume{ext}").write_text("x", encoding="utf-8")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(render.shutil, "which", lambda _n: "/usr/bin/pdflatex")
+    monkeypatch.setattr(render.subprocess, "run", fake_run)
+    assert render._tex_to_pdf_pdflatex(tex, tmp_path) == tmp_path / "resume.pdf"
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["resume.pdf", "resume.tex"]

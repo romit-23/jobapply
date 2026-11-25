@@ -967,3 +967,25 @@ def test_same_origin_and_dev_origin_posts_pass_guard(app_factory: Any) -> None:
         resp = client.post("/api/tasks/nope/cancel", headers={"Origin": origin})
         # Guard passed; the route itself answers for the unknown task.
         assert resp.status_code != 403, origin
+
+
+def test_email_hint_fills_name_placeholder(app_factory: Any) -> None:
+    """A JD asking for subject "Role - <your name>" gets the profile name."""
+    from jobapply.models import JobRecord
+
+    client, _, _ = app_factory()
+    ws = client.app.state.ctx.workspace
+    ws.upsert_job(
+        JobRecord(
+            job_id="hint1",
+            title="Platform Engineer",
+            company="Acme",
+            description=(
+                "Apply by emailing careers@acme.example with subject "
+                "'Platform Engineer - <your name>'."
+            ),
+        )
+    )
+    hints = client.get("/api/jobs/hint1/email-hint").json()
+    assert hints["primary_email"] == "careers@acme.example"
+    assert hints["subject_line"] == "Platform Engineer - Test Candidate"

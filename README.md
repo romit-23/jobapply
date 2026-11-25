@@ -277,7 +277,7 @@ model   = "gpt-4o-mini"
 
 [providers.anthropic]
 api_key = "env:ANTHROPIC_API_KEY"
-model   = "claude-3-5-haiku-latest"
+model   = "claude-haiku-5-5"
 
 [providers.cloudflare]
 api_key    = "env:CLOUDFLARE_API_TOKEN"

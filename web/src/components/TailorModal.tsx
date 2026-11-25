@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Loader2, Wand2, X } from "lucide-react";
 import { useProviders } from "@/lib/hooks";
+import { useDialog } from "@/lib/useDialog";
 
 export interface TailorOptions {
   provider: string;
@@ -67,6 +68,8 @@ export default function TailorModal({
     setModel(providers.data.active_model);
   }, [open, providers.data]);
 
+  const dialogRef = useDialog<HTMLFormElement>(open, onClose, !pending);
+
   if (!open) return null;
 
   const submit = async (e: React.FormEvent) => {
@@ -86,11 +89,18 @@ export default function TailorModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm">
       <form
+        ref={dialogRef}
         onSubmit={submit}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="tailor-modal-title"
         className="card w-full max-w-lg space-y-4 border-slate-700 p-6"
       >
-        <div className="flex items-center gap-2 text-base font-semibold text-slate-100">
-          <Wand2 size={18} className="text-brand-400" />
+        <div
+          id="tailor-modal-title"
+          className="flex items-center gap-2 text-base font-semibold text-slate-100"
+        >
+          <Wand2 size={18} className="text-brand-400" aria-hidden="true" />
           {title ??
             (isBatch
               ? "Tailor selected jobs"

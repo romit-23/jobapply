@@ -59,11 +59,11 @@ def test_right_block_emits_link_lines_for_socials() -> None:
         name="Arun",
         role="ML Engineer",
     )
-    assert r"LinkedIn: \href{https://linkedin.com/in/arun-addagatla}{link}" in out
-    assert r"Portfolio: \href{https://arunaddagatla.vercel.app/}{link}" in out
-    assert r"GitHub: \href{https://github.com/arun2728}{link}" in out
-    assert r"Medium: \href{https://medium.com/@arunaddagatla}{link}" in out
-    assert r"Twitter: \href{https://twitter.com/arun2728}{link}" in out
+    assert r"LinkedIn: \href{https://linkedin.com/in/arun-addagatla}{arun-addagatla}" in out
+    assert r"Portfolio: \href{https://arunaddagatla.vercel.app/}{arunaddagatla.vercel.app}" in out
+    assert r"GitHub: \href{https://github.com/arun2728}{arun2728}" in out
+    assert r"Medium: \href{https://medium.com/@arunaddagatla}{@arunaddagatla}" in out
+    assert r"Twitter: \href{https://twitter.com/arun2728}{arun2728}" in out
 
 
 def test_empty_contact_leaves_minipage_blocks_blank_but_template_intact() -> None:

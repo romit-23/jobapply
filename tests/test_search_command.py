@@ -466,3 +466,81 @@ def test_search_uses_explicit_provider_and_model_overrides(
     assert meta["provider"] == "anthropic"
     assert meta["model"] == "claude-3-5-sonnet"
     assert meta["scored"] is True
+
+
+def test_remote_location_maps_to_remote_filter(monkeypatch) -> None:
+    """Typing "Remote" as the location must use JobSpy's is_remote flag,
+    not be sent as a place name (boards ignore it and return on-site jobs)."""
+    from jobapply.agents import search as search_mod
+    from jobapply.models import JobSearchInput
+
+    calls: list[dict] = []
+
+    def fake_scrape(**kwargs):
+        calls.append(kwargs)
+        return []
+
+    monkeypatch.setattr(search_mod, "_scrape_once", fake_scrape)
+    list(search_mod.iter_search_jobs(JobSearchInput(titles=["Dev"], location=" Remote ")))
+    assert calls[0]["location"] is None
+    assert calls[0]["is_remote"] is True
+
+    calls.clear()
+    list(search_mod.iter_search_jobs(JobSearchInput(titles=["Dev"], location="Austin, TX")))
+    assert calls[0]["location"] == "Austin, TX"
+    assert calls[0]["is_remote"] is False
+
+
+def test_remote_search_drops_onsite_rows_and_nan_fields(monkeypatch) -> None:
+    """Boards ignore the remote flag in some combinations (Indeed with
+    hours_old, LinkedIn always), so remote searches must post-filter rows.
+    Missing pandas cells (NaN) must not become the string "nan"."""
+    from jobapply.agents import search as search_mod
+    from jobapply.models import JobSearchInput
+
+    nan = float("nan")
+    rows = [
+        {
+            "title": "Dev A",
+            "company": "Acme",
+            "location": "Remote, US",
+            "site": "indeed",
+            "job_url": "https://x/a",
+            "is_remote": True,
+            "description": "d",
+        },
+        {
+            "title": "Dev B",
+            "company": nan,
+            "location": "Fort Meade, MD",
+            "site": "indeed",
+            "job_url": "https://x/b",
+            "is_remote": False,
+            "description": nan,
+        },
+        {
+            "title": "Dev C",
+            "company": nan,
+            "location": "Remote",
+            "site": "linkedin",
+            "job_url": "https://x/c",
+            "job_url_apply": nan,
+            "is_remote": nan,
+            "description": nan,
+            "date_posted": "2026-11-20",
+        },
+    ]
+    monkeypatch.setattr(search_mod, "_scrape_once", lambda **_k: rows)
+
+    remote = list(search_mod.iter_search_jobs(JobSearchInput(titles=["Dev"], location="Remote")))
+    assert [j.title for j in remote] == ["Dev A", "Dev C"]
+    c = remote[1]
+    assert c.company == "" and c.description == ""
+    assert c.apply_url == "https://x/c"  # NaN apply URL falls back to job_url
+    assert c.date_posted == "2026-11-20"
+
+    everything = list(
+        search_mod.iter_search_jobs(JobSearchInput(titles=["Dev"], results_wanted=10))
+    )
+    assert len(everything) == 3
+    assert all(j.company != "nan" for j in everything)

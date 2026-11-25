@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import re
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
@@ -53,7 +54,7 @@ from jobapply.models import (
     LedgerStatus,
     RawJob,
 )
-from jobapply.nodes.render import probe_tex_pdf_backend, tex_to_pdf
+from jobapply.nodes.render import latex_log_errors, probe_tex_pdf_backend, tex_to_pdf
 from jobapply.profile import (
     Profile,
     ProfileLoadError,
@@ -370,6 +371,11 @@ def _record_to_raw_job(record: JobRecord) -> RawJob:
 
 # ---------------------------- App factory ----------------------------------- #
 
+
+# "<your name>", "[Your Name]", "{name}", "(full name)" in JD subject lines.
+_NAME_PLACEHOLDER_RE = re.compile(
+    r"[<\[{(]\s*(?:your\s+)?(?:full\s+)?name\s*[>\]})]", re.IGNORECASE
+)
 
 # Loopback names the UI is reachable on by default. The Host header is
 # checked against these so a DNS-rebinding page (evil.example resolving
@@ -740,18 +746,26 @@ def _register_routes(app: FastAPI) -> None:
                     "latex_api in jobapply.toml."
                 ),
             )
-        # ``tex_to_pdf`` walks the configured backends and silently
-        # returns ``None`` on failure — we don't get a build log out of
-        # any of them. A 500 with the backend name is the most
-        # actionable thing we can surface today.
+        # ``tex_to_pdf`` returns ``None`` on failure; local pdflatex
+        # leaves ``<stem>.log`` behind, which we summarise so the editor
+        # can point at the offending line. Drop any stale log first so we
+        # never report errors from an earlier build.
+        log_path = job_dir / f"{tex_path.stem}.log"
+        with contextlib.suppress(OSError):
+            log_path.unlink(missing_ok=True)
         pdf_path = tex_to_pdf(tex_path, job_dir)
         if pdf_path is None or not pdf_path.is_file():
+            details = latex_log_errors(log_path)
             raise HTTPException(
                 status_code=502,
                 detail=(
-                    f"LaTeX compile via '{backend}' failed. The source "
-                    "likely has a syntax error — re-run the tailor "
-                    "pipeline or fix the .tex by hand."
+                    f"LaTeX compile via '{backend}' failed:\n{details}"
+                    if details
+                    else (
+                        f"LaTeX compile via '{backend}' failed. The source "
+                        "likely has a syntax error — re-run the tailor "
+                        "pipeline or fix the .tex by hand."
+                    )
                 ),
             )
         st = pdf_path.stat()
@@ -1214,9 +1228,20 @@ def _register_routes(app: FastAPI) -> None:
             if record.application is not None
             else extract_application_hints(record.description or "")
         )
+        subject = hints.subject_line
+        if subject:
+            # JDs often say "subject: Platform Engineer - <your name>";
+            # fill the placeholder so the pre-filled subject is usable.
+            try:
+                profile, *_ = _load_profile(ctx)
+                name = (profile.name or "").strip()
+            except HTTPException:
+                name = ""
+            if name:
+                subject = _NAME_PLACEHOLDER_RE.sub(name, subject)
         return {
             "primary_email": hints.primary_email,
-            "subject_line": hints.subject_line,
+            "subject_line": subject,
             "instructions": list(hints.instructions),
         }
 

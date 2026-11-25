@@ -527,6 +527,6 @@ jobapply init --resume resume.pdf
 2. **UI tasks are in memory.** Restarting `jobapply ui` loses running tasks and history in `/api/tasks`. Job data is safe in `workspace.db`.
 3. **The UI has no `min_fit` filter.** Only the CLI `run` auto-skips low-fit jobs.
 4. **No fallback model.** If the configured model is overloaded (503), the task fails after the SDK's retries. It does not switch models.
-5. **Default model names can go stale.** `DEFAULT_MODELS` in `config.py` (for example `gemini-2.0-flash`) can be retired by the provider.
+5. **Default model names can go stale.** `DEFAULT_MODELS` in `config.py` (for example `gemini-flash-latest`) can be retired by the provider.
 6. **Privacy defaults.** The README says your resume stays local "unless you tell it to", but by default profile text goes to the chosen LLM provider and `.tex` files go to the public latex-on-http service.
 7. **Scraping is fragile.** JobSpy depends on job-board HTML and anti-bot behavior, so results per site can be empty or change without notice.

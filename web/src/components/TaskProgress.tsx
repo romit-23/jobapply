@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 import { useTaskPoll } from "@/lib/hooks";
@@ -19,6 +19,7 @@ export default function TaskProgress({
 }: Props) {
   const { task, error } = useTaskPoll(taskId);
   const qc = useQueryClient();
+  const [cancelling, setCancelling] = useState(false);
 
   useEffect(() => {
     if (!task) return;
@@ -75,9 +76,18 @@ export default function TaskProgress({
         {isRunning ? (
           <button
             className="btn-ghost text-xs"
-            onClick={() => api.cancelTask(task.task_id).catch(() => {})}
+            disabled={cancelling}
+            title={
+              cancelling
+                ? "Stopping after the current step finishes"
+                : "Stop this task after the current step"
+            }
+            onClick={() => {
+              setCancelling(true);
+              api.cancelTask(task.task_id).catch(() => setCancelling(false));
+            }}
           >
-            Cancel
+            {cancelling ? "Cancelling…" : "Cancel"}
           </button>
         ) : null}
       </div>
