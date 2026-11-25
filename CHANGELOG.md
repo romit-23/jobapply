@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Detailed write-up of the 2026-11-25 audit fixes: [docs/CHANGES-2026-11-25.md](docs/CHANGES-2026-11-25.md).
+
 ### Security
 - **Remote LaTeX compilation is now opt-in.** `[latex_api] enabled` defaults
   to `false`, and `render.tex_to_pdf` treats an unset
@@ -24,6 +26,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   kpathsea paranoid mode (`openin_any=p`, `openout_any=p`, `TEXMFOUTPUT` =
   job dir), so a `.tex` edited in the browser can no longer `\input` files
   from elsewhere on disk into the PDF.
+
+### Fixed
+- Default models: `gemini-2.0-flash` (retired, 404) → `gemini-flash-latest`;
+  `claude-3-5-haiku-latest` → `claude-haiku-5-5`. `jobapply init` failed for
+  every new Gemini user.
+- "Remote" searches returned on-site jobs: a location of "Remote"/"Anywhere"
+  now maps to the remote filter, and rows JobSpy doesn't flag as remote are
+  dropped (Indeed ignores `is_remote` when `hours_old` is set; LinkedIn
+  ignores it entirely).
+- Missing JobSpy fields no longer show up as the literal text "nan"
+  (company, URLs, description); posting dates are read from `date_posted`.
+- History / task times were off by the local UTC offset ("5h ago" for a
+  search that just ran) because naive UTC timestamps were parsed as local.
+- Cancelling a batch now shows "Cancelling…" until the in-flight job
+  finishes, and the dashboard refreshes with that job's result instead of
+  showing it as still pending.
+- LaTeX compile failures in the editor now show the first error with its
+  line number instead of a generic message; successful local builds no
+  longer leave `.aux`/`.log`/`.out` files in job folders.
+- Cover letters show your LinkedIn/GitHub/… handles instead of the word
+  "link" (useless once printed).
+- Email-hint subject lines fill `<your name>`-style placeholders from the
+  profile; the email dialog notes that mail links can't attach the PDFs.
+
+### Changed
+- Search button stays disabled while a search is running (prevents
+  duplicate scrapes), and the search form remembers its last inputs.
+- Tailor and email dialogs are real dialogs: `role="dialog"`, focus moves
+  in and is trapped, Escape closes.
 
 ### Added
 - Jobs dashboard sorting by fit or title, visible-result batch selection,
