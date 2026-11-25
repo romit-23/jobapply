@@ -30,7 +30,6 @@ from jobapply.tailor_one import (
     tailor_for_job_description,
 )
 
-
 PROFILE_TEXT = (
     "# Profile\n"
     "## Header\n"
@@ -164,18 +163,16 @@ def test_tailor_with_email_writes_email_artifact(tmp_path: Path, jd_path: Path) 
     assert "Ready-to-paste body" in text
 
 
-def test_tailor_skips_llm_meta_call_when_overrides_complete(
-    tmp_path: Path, jd_path: Path
-) -> None:
+def test_tailor_skips_llm_meta_call_when_overrides_complete(tmp_path: Path, jd_path: Path) -> None:
     """When --title/--company/--location are all supplied, the JD parser
     is skipped (saves a call) and the overrides are honoured verbatim."""
     output_root = tmp_path / "tailor-test"
 
     class _NoMetaLLM(FakeChatModel):
         def with_structured_output(self, schema: type[Any]) -> _FakeStructured:
-            assert schema.__name__ != "JobDescriptionMeta", (
-                "JD parser should be skipped when overrides are complete"
-            )
+            assert (
+                schema.__name__ != "JobDescriptionMeta"
+            ), "JD parser should be skipped when overrides are complete"
             return super().with_structured_output(schema)
 
     out = tailor_for_job_description(
@@ -434,9 +431,9 @@ def test_tailor_with_json_input_skips_jd_parser(tmp_path: Path) -> None:
 
     class _NoJDParserLLM(FakeChatModel):
         def with_structured_output(self, schema: type[Any]) -> _FakeStructured:
-            assert schema.__name__ != "JobDescriptionMeta", (
-                "JD parser should be skipped for saved-job JSON input"
-            )
+            assert (
+                schema.__name__ != "JobDescriptionMeta"
+            ), "JD parser should be skipped for saved-job JSON input"
             return super().with_structured_output(schema)
 
     out = tailor_for_job_description(

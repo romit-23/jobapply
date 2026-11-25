@@ -40,9 +40,7 @@ def draft_application_email(
     ``additional_info`` is optional: when blank we just rely on the
     JD + resume / profile context.
     """
-    fallback_name = (
-        (resume.document_title if resume else "") or ""
-    ).strip()
+    fallback_name = ((resume.document_title if resume else "") or "").strip()
     name = (sender_name or fallback_name).strip() or "the candidate"
     additional = (additional_info or "").strip() or "(none provided)"
 

@@ -35,9 +35,7 @@ def test_jobsearch_input_can_disable_linkedin_descriptions() -> None:
     assert inp.linkedin_fetch_description is False
 
 
-def _install_fake_jobspy(
-    monkeypatch: pytest.MonkeyPatch, captured: list[dict[str, Any]]
-) -> None:
+def _install_fake_jobspy(monkeypatch: pytest.MonkeyPatch, captured: list[dict[str, Any]]) -> None:
     """Replace the top-level ``jobspy`` module with a fake whose
     ``scrape_jobs`` records its kwargs and returns an empty result.
     Done at module level so ``from jobspy import scrape_jobs`` inside
@@ -75,11 +73,7 @@ def test_iter_search_jobs_honors_disabled_flag(
     _install_fake_jobspy(monkeypatch, captured)
     from jobapply.agents.search import iter_search_jobs
 
-    list(
-        iter_search_jobs(
-            JobSearchInput(titles=["Backend"], linkedin_fetch_description=False)
-        )
-    )
+    list(iter_search_jobs(JobSearchInput(titles=["Backend"], linkedin_fetch_description=False)))
 
     assert captured[0]["linkedin_fetch_description"] is False
 

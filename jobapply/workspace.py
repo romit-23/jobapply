@@ -28,15 +28,15 @@ from pathlib import Path
 from typing import Any
 
 from sqlalchemy.engine import Engine
-from sqlmodel import Field, Session, SQLModel, create_engine, select
+from sqlmodel import Field, Session, SQLModel, col, create_engine, select
 
 from jobapply.models import (
     ApplicationHints,
     FitScore,
     JobArtifacts,
     JobRecord,
-    JobsIndex,
     JobSearchInput,
+    JobsIndex,
     LedgerStatus,
 )
 from jobapply.nodes.persist import write_jobs_csv
@@ -56,7 +56,7 @@ class WorkspaceJobEntry(SQLModel, table=True):
     queries are cheap when users filter the DB by hand.
     """
 
-    __tablename__ = "workspace_jobs"  # type: ignore[assignment]
+    __tablename__ = "workspace_jobs"
 
     job_id: str = Field(primary_key=True, max_length=64)
     title: str = ""
@@ -87,7 +87,7 @@ class WorkspaceSearchEntry(SQLModel, table=True):
     ``last_search_id`` foreign keys on :class:`WorkspaceJobEntry`.
     """
 
-    __tablename__ = "workspace_searches"  # type: ignore[assignment]
+    __tablename__ = "workspace_searches"
 
     id: int | None = Field(default=None, primary_key=True)
     command: str = Field(max_length=16, description='"search" or "run".')
@@ -144,7 +144,10 @@ class Workspace:
     that we don't bother with pooling).
     """
 
-    _TABLES = [WorkspaceJobEntry.__table__, WorkspaceSearchEntry.__table__]
+    _TABLES = [
+        WorkspaceJobEntry.__table__,  # type: ignore[attr-defined]
+        WorkspaceSearchEntry.__table__,  # type: ignore[attr-defined]
+    ]
 
     def __init__(self, path: Path) -> None:
         self.path = path.resolve()
@@ -300,9 +303,7 @@ class Workspace:
     def all_records(self) -> list[JobRecord]:
         """Hydrate every stored row back into a :class:`JobRecord`."""
         with Session(self._engine) as s:
-            stmt = select(WorkspaceJobEntry).order_by(
-                WorkspaceJobEntry.last_seen_at.desc()  # type: ignore[union-attr]
-            )
+            stmt = select(WorkspaceJobEntry).order_by(col(WorkspaceJobEntry.last_seen_at).desc())
             return [_row_to_record(r) for r in s.exec(stmt)]
 
     def count(self) -> int:

@@ -53,7 +53,6 @@ from jobapply.models import (
 from jobapply.profile import Profile
 from jobapply.profile_validation import merge_skills_preserving_order
 
-
 # ---------------------------------------------------------------------------
 # Deterministic profile → resume helpers
 # ---------------------------------------------------------------------------
@@ -183,26 +182,16 @@ def _non_blank_experience(profile: Profile) -> list:
     the "what the LLM sees" / "what we render" lists in lock-step and
     makes the pairing index unambiguous.
     """
-    return [
-        role
-        for role in profile.experience
-        if role.company or role.role or role.bullets
-    ]
+    return [role for role in profile.experience if role.company or role.role or role.bullets]
 
 
 def _non_blank_projects(profile: Profile) -> list:
     """Same predicate-matched filter for projects (see
     :func:`_non_blank_experience`)."""
-    return [
-        project
-        for project in profile.projects
-        if project.name or project.bullets
-    ]
+    return [project for project in profile.projects if project.name or project.bullets]
 
 
-def _pair_experience(
-    profile: Profile, llm_bullets: list[list[str]]
-) -> list[ExperienceRole]:
+def _pair_experience(profile: Profile, llm_bullets: list[list[str]]) -> list[ExperienceRole]:
     """Pair each non-blank profile role (in order) with the LLM's
     rewritten bullets.
 
@@ -215,11 +204,7 @@ def _pair_experience(
     rows = _non_blank_experience(profile)
     out: list[ExperienceRole] = []
     for i, role in enumerate(rows):
-        rewritten = (
-            [b for b in llm_bullets[i] if b and b.strip()]
-            if i < len(llm_bullets)
-            else []
-        )
+        rewritten = [b for b in llm_bullets[i] if b and b.strip()] if i < len(llm_bullets) else []
         bullets = rewritten or [b for b in role.bullets if b and b.strip()]
         out.append(
             ExperienceRole(
@@ -232,18 +217,12 @@ def _pair_experience(
     return out
 
 
-def _pair_projects(
-    profile: Profile, llm_bullets: list[list[str]]
-) -> list[ProjectItem]:
+def _pair_projects(profile: Profile, llm_bullets: list[list[str]]) -> list[ProjectItem]:
     """Same as :func:`_pair_experience` for the ``projects`` section."""
     rows = _non_blank_projects(profile)
     out: list[ProjectItem] = []
     for i, project in enumerate(rows):
-        rewritten = (
-            [b for b in llm_bullets[i] if b and b.strip()]
-            if i < len(llm_bullets)
-            else []
-        )
+        rewritten = [b for b in llm_bullets[i] if b and b.strip()] if i < len(llm_bullets) else []
         source_bullets = [b for b in project.bullets if b and b.strip()]
         bullets = rewritten or list(source_bullets)
         # Same description-promotion rule as the legacy fallback so a
@@ -408,16 +387,22 @@ def _request_tailored_bullets(
     # ``_pair_projects`` use when we later assemble the resume.
     exp_rows = _non_blank_experience(profile)
     proj_rows = _non_blank_projects(profile)
-    role_lines = "\n".join(
-        f"  [{i}] {(r.role or '(role)')} @ {(r.company or '(company)')}"
-        f" — {len([b for b in r.bullets if b.strip()])} source bullets"
-        for i, r in enumerate(exp_rows)
-    ) or "  (profile has no experience entries)"
-    project_lines = "\n".join(
-        f"  [{i}] {(p.name or '(project)')}"
-        f" — {len([b for b in p.bullets if b.strip()])} source bullets"
-        for i, p in enumerate(proj_rows)
-    ) or "  (profile has no projects)"
+    role_lines = (
+        "\n".join(
+            f"  [{i}] {(r.role or '(role)')} @ {(r.company or '(company)')}"
+            f" — {len([b for b in r.bullets if b.strip()])} source bullets"
+            for i, r in enumerate(exp_rows)
+        )
+        or "  (profile has no experience entries)"
+    )
+    project_lines = (
+        "\n".join(
+            f"  [{i}] {(p.name or '(project)')}"
+            f" — {len([b for b in p.bullets if b.strip()])} source bullets"
+            for i, p in enumerate(proj_rows)
+        )
+        or "  (profile has no projects)"
+    )
 
     sys = SystemMessage(
         content=(

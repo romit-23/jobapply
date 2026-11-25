@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import sys
 from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import questionary
 import typer
@@ -20,6 +22,7 @@ from rich.progress import (
 )
 from rich.table import Table
 
+from jobapply import __version__
 from jobapply.agents.fit_scorer import score_fit
 from jobapply.agents.search import iter_search_jobs
 from jobapply.config import (
@@ -38,6 +41,8 @@ from jobapply.config import (
 )
 from jobapply.config_writer import render_config_toml
 from jobapply.graph_nodes import bootstrap_resume_state
+from jobapply.jd_extract import hints_to_email_context
+from jobapply.llm import create_chat_model
 from jobapply.models import (
     FitScore,
     JobRecord,
@@ -72,7 +77,6 @@ from jobapply.profile_validation import (
     validate_profile_path,
 )
 from jobapply.runner import run_pipeline
-from jobapply.workspace import Workspace
 from jobapply.tailor_one import (
     JD_SUPPORTED_SUFFIXES,
     TAILOR_INPUT_SUFFIXES,
@@ -81,10 +85,9 @@ from jobapply.tailor_one import (
     peek_application_hints,
     tailor_for_job_description,
 )
-from jobapply.jd_extract import hints_to_email_context
-from jobapply import __version__
-from jobapply.llm import create_chat_model
-from jobapply.utils import atomic_write_json, profile_hash as profile_hash_fn, slugify
+from jobapply.utils import atomic_write_json, slugify
+from jobapply.utils import profile_hash as profile_hash_fn
+from jobapply.workspace import Workspace
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 console = Console()
@@ -341,8 +344,7 @@ def _ask_provider_settings(provider: str, current: ProviderConfig) -> ProviderCo
             prompt = "Cloudflare API token (Workers AI scope; or env:VAR_NAME, blank to skip)"
         elif provider == "openrouter":
             prompt = (
-                "OpenRouter API key (https://openrouter.ai/keys; "
-                "or env:VAR_NAME, blank to skip)"
+                "OpenRouter API key (https://openrouter.ai/keys; " "or env:VAR_NAME, blank to skip)"
             )
         else:
             prompt = f"{provider} API key (or env:VAR_NAME, blank to skip)"
@@ -425,12 +427,10 @@ def _interactive_config(existing: AppConfig | None) -> AppConfig:
     pre_checked = {name for name in PROVIDER_NAMES if base.providers.get(name)}
     pre_checked.add(base.provider)
     choices = [
-        questionary.Choice(name, value=name, checked=name in pre_checked)
-        for name in PROVIDER_NAMES
+        questionary.Choice(name, value=name, checked=name in pre_checked) for name in PROVIDER_NAMES
     ]
     selected = questionary.checkbox(
-        "Which providers do you want to configure? "
-        "(space to toggle, enter to confirm)",
+        "Which providers do you want to configure? " "(space to toggle, enter to confirm)",
         choices=choices,
         validate=lambda picked: bool(picked) or "Pick at least one provider.",
     ).ask()
@@ -884,8 +884,7 @@ def ui_cmd(
 
     url = f"http://{host}:{port}"
     console.print(
-        f"[bold green]JobApply UI[/bold green] → {url}\n"
-        f"[dim]API docs: {url}/docs[/dim]"
+        f"[bold green]JobApply UI[/bold green] → {url}\n" f"[dim]API docs: {url}/docs[/dim]"
     )
 
     if open_browser and bundle_present and not os.environ.get("JOBAPPLY_NO_OPEN"):
@@ -895,10 +894,8 @@ def ui_cmd(
             import time
 
             time.sleep(1.2)
-            try:
+            with contextlib.suppress(Exception):
                 webbrowser.open(url)
-            except Exception:  # noqa: BLE001
-                pass
 
         threading.Thread(target=_open_later, daemon=True).start()
 
@@ -1094,9 +1091,7 @@ def run(
         raise typer.Exit(1)
     title_list = [x.strip() for x in titles.split(",") if x.strip()]
     skill_list = [x.strip() for x in (skills or "").split(",") if x.strip()]
-    prov, mdl = _resolve_provider_and_model(
-        cfg, provider=provider, model=model, yes=yes
-    )
+    prov, mdl = _resolve_provider_and_model(cfg, provider=provider, model=model, yes=yes)
 
     effective_results = results if results is not None else cfg.results_wanted
     effective_min_fit = min_fit if min_fit is not None else cfg.min_fit
@@ -1217,11 +1212,9 @@ def run(
             provider=prov,
             model=mdl,
         )
-        results = final_state.get("results") or []
-        new_jobs = sum(
-            1 for r in results if r.get("status") not in {"cached"}
-        )
-        duplicate_jobs = sum(1 for r in results if r.get("status") == "cached")
+        run_results = final_state.get("results") or []
+        new_jobs = sum(1 for r in run_results if r.get("status") not in {"cached"})
+        duplicate_jobs = sum(1 for r in run_results if r.get("status") == "cached")
         if workspace_search_id is not None:
             workspace_obj.finish_search(
                 workspace_search_id,
@@ -1360,9 +1353,7 @@ def _print_top_matches(records: list[JobRecord], *, limit: int = 5) -> None:
 
 @app.command("search")
 def search_cmd(
-    titles: str | None = typer.Option(
-        None, "--titles", "-t", help="Comma-separated job titles."
-    ),
+    titles: str | None = typer.Option(None, "--titles", "-t", help="Comma-separated job titles."),
     skills: str | None = typer.Option(
         None,
         "--skills",
@@ -1457,9 +1448,7 @@ def search_cmd(
             "blank. Default: on."
         ),
     ),
-    yes: bool = typer.Option(
-        False, "--yes", "-y", help="Non-interactive defaults (skip prompts)."
-    ),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Non-interactive defaults (skip prompts)."),
 ) -> None:
     """Fetch jobs (and optionally score them) into a CSV — no resume tailoring.
 
@@ -1482,9 +1471,7 @@ def search_cmd(
 
     if not yes:
         titles = titles or questionary.text("Job titles (comma-separated)").ask()
-        skills = skills or questionary.text(
-            "Primary skills (comma-separated)", default=""
-        ).ask()
+        skills = skills or questionary.text("Primary skills (comma-separated)", default="").ask()
         if location is None:
             location = questionary.text("Location (or blank)", default="").ask()
     if not titles:
@@ -1493,9 +1480,7 @@ def search_cmd(
 
     title_list = [x.strip() for x in titles.split(",") if x.strip()]
     skill_list = [x.strip() for x in (skills or "").split(",") if x.strip()]
-    site_list = (
-        [x.strip() for x in sites.split(",") if x.strip()] if sites else cfg.sites
-    )
+    site_list = [x.strip() for x in sites.split(",") if x.strip()] if sites else cfg.sites
     effective_results = results if results is not None else cfg.results_wanted
     effective_output = output_dir or cfg.output_dir
 
@@ -1504,9 +1489,7 @@ def search_cmd(
     prov = ""
     mdl = ""
     if score:
-        prov, mdl = _resolve_provider_and_model(
-            cfg, provider=provider, model=model, yes=yes
-        )
+        prov, mdl = _resolve_provider_and_model(cfg, provider=provider, model=model, yes=yes)
         _validate_keys(cfg, prov)
         effective_profile = profile_path or cfg.profile_path
         prof = Path(effective_profile)
@@ -1528,8 +1511,7 @@ def search_cmd(
         # Be loud about the no-op so users don't think their flag took
         # effect when it actually didn't.
         console.print(
-            "[yellow]--provider / --model / --profile are ignored without "
-            "--score.[/yellow]"
+            "[yellow]--provider / --model / --profile are ignored without " "--score.[/yellow]"
         )
 
     workspace_dir = _resolve_workspace_dir(workspace, root)
@@ -1553,9 +1535,7 @@ def search_cmd(
         linkedin_fetch_description=linkedin_descriptions,
     )
 
-    score_summary = (
-        f"  provider={prov}  model={mdl}" if score else "  [dim](no scoring)[/dim]"
-    )
+    score_summary = f"  provider={prov}  model={mdl}" if score else "  [dim](no scoring)[/dim]"
     workspace_summary = ""
     if workspace_obj is not None:
         existing = workspace_obj.count()
@@ -2043,8 +2023,9 @@ def tailor(
             bits.append(f"subject '[bold]{detected_hints.subject_line}[/bold]'")
         if bits:
             console.print(
-                "[dim]Detected from JD:[/dim] " + ", ".join(bits) +
-                " [dim](override with --email-to / --email-context)[/dim]"
+                "[dim]Detected from JD:[/dim] "
+                + ", ".join(bits)
+                + " [dim](override with --email-to / --email-context)[/dim]"
             )
 
     if with_email and not email_to:
@@ -2068,9 +2049,7 @@ def tailor(
         )
         raise typer.Exit(1)
     if with_email and email_context is None:
-        suggested = (
-            hints_to_email_context(detected_hints) if detected_hints else ""
-        )
+        suggested = hints_to_email_context(detected_hints) if detected_hints else ""
         if yes:
             email_context = suggested
         else:
@@ -2080,9 +2059,7 @@ def tailor(
             ).ask()
             email_context = ctx_answer if ctx_answer is not None else ""
 
-    prov, mdl = _resolve_provider_and_model(
-        cfg, provider=provider, model=model, yes=yes
-    )
+    prov, mdl = _resolve_provider_and_model(cfg, provider=provider, model=model, yes=yes)
     _validate_keys(cfg, prov)
 
     effective_profile = profile_path or cfg.profile_path
@@ -2164,9 +2141,7 @@ def tailor(
         artifacts=artifacts,
         email_to=outputs.email.to if outputs.email else None,
     )
-    console.print(
-        f"[green]Tailored[/green] '{outputs.job.title}' at {outputs.job.company}."
-    )
+    console.print(f"[green]Tailored[/green] '{outputs.job.title}' at {outputs.job.company}.")
 
 
 def main() -> None:

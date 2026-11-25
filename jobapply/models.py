@@ -99,9 +99,7 @@ class ApplicationHints(BaseModel):
         that go through an ATS rather than a direct recruiter
         address).
         """
-        return bool(
-            self.emails or self.primary_email or self.subject_line or self.instructions
-        )
+        return bool(self.emails or self.primary_email or self.subject_line or self.instructions)
 
 
 class RawJob(BaseModel):
@@ -164,9 +162,7 @@ class EducationItem(BaseModel):
 
     school: str = ""
     degree: str = ""
-    location: str = Field(
-        "", description="Plain-text city/country (e.g. 'Mumbai, India')."
-    )
+    location: str = Field("", description="Plain-text city/country (e.g. 'Mumbai, India').")
     dates: str = ""
     gpa: str = Field("", description="GPA value with scale, e.g. '9.6/10' or '3.85/4.0'.")
     coursework: str = Field(

@@ -25,7 +25,7 @@ from jobapply.models import (
     RawJob,
     TailoredResume,
 )
-from jobapply.profile import save_profile, Profile, ProfileExperience
+from jobapply.profile import Profile, ProfileExperience, save_profile
 from jobapply.server import create_app
 from jobapply.tasks import TaskManager
 
@@ -40,7 +40,7 @@ def _write_minimal_toml(path: Path) -> None:
         "results_wanted = 5\n"
         "hours_old = 24\n"
         'sites = ["indeed"]\n'
-        '[providers.openai]\n'
+        "[providers.openai]\n"
         'api_key = "test-key"\n'
         'model = "test-model"\n',
         encoding="utf-8",
@@ -112,9 +112,7 @@ def _stub_cover_letter() -> CoverLetter:
     )
 
 
-def _wait_for_task(
-    client: TestClient, task_id: str, *, timeout: float = 5.0
-) -> dict[str, Any]:
+def _wait_for_task(client: TestClient, task_id: str, *, timeout: float = 5.0) -> dict[str, Any]:
     """Poll the task endpoint until the task settles or we time out.
 
     The server runs tasks on background threads, so even with stubbed
@@ -262,15 +260,11 @@ def test_search_endpoint_dedupes_on_second_call(
     client, *_ = app_factory()
     from jobapply import server as srv
 
-    monkeypatch.setattr(
-        srv, "iter_search_jobs", lambda inp: iter([_stub_raw("a1")])
-    )
+    monkeypatch.setattr(srv, "iter_search_jobs", lambda inp: iter([_stub_raw("a1")]))
     first = client.post("/api/search", json={"titles": ["X"]}).json()
     _wait_for_task(client, first["task_id"])
 
-    monkeypatch.setattr(
-        srv, "iter_search_jobs", lambda inp: iter([_stub_raw("a1")])
-    )
+    monkeypatch.setattr(srv, "iter_search_jobs", lambda inp: iter([_stub_raw("a1")]))
     second = client.post("/api/search", json={"titles": ["X"]}).json()
     final = _wait_for_task(client, second["task_id"])
     assert final["result"]["new_jobs"] == 0
@@ -289,9 +283,7 @@ def test_freeform_endpoint_creates_tailored_job(
 
     from jobapply import server as srv
 
-    monkeypatch.setattr(
-        srv, "create_chat_model", lambda *a, **kw: object()
-    )
+    monkeypatch.setattr(srv, "create_chat_model", lambda *a, **kw: object())
     # `tailor_for_job_description` is the heavy entry point — easier
     # to stub the whole thing than to mock six different agents.
     captured: dict[str, Any] = {}
@@ -320,12 +312,8 @@ def test_freeform_endpoint_creates_tailored_job(
         job_dir = jd_path.parent
         (job_dir / "resume.md").write_text("# Resume\n", encoding="utf-8")
         (job_dir / "resume.tex").write_text("% resume tex", encoding="utf-8")
-        (job_dir / "cover_letter.md").write_text(
-            "# Cover\n", encoding="utf-8"
-        )
-        (job_dir / "cover_letter.tex").write_text(
-            "% cover tex", encoding="utf-8"
-        )
+        (job_dir / "cover_letter.md").write_text("# Cover\n", encoding="utf-8")
+        (job_dir / "cover_letter.tex").write_text("% cover tex", encoding="utf-8")
         return TailorOutputs(
             job_dir=job_dir,
             job=job,
@@ -380,9 +368,7 @@ def test_tailor_one_endpoint_runs_pipeline(
     # Seed the workspace with a single pending job via the search
     # endpoint (using the search stub) so we don't have to touch the
     # workspace internals from the test.
-    monkeypatch.setattr(
-        srv, "iter_search_jobs", lambda inp: iter([_stub_raw("a1")])
-    )
+    monkeypatch.setattr(srv, "iter_search_jobs", lambda inp: iter([_stub_raw("a1")]))
     seed = client.post("/api/search", json={"titles": ["X"]}).json()
     _wait_for_task(client, seed["task_id"])
     assert client.get("/api/jobs").json()["total"] == 1
@@ -443,9 +429,7 @@ def test_tailor_writes_artifacts_under_workspace_jobs_slug_not_double_jobs(
     client, tmp_path, _ = app_factory()
     from jobapply import server as srv
 
-    monkeypatch.setattr(
-        srv, "iter_search_jobs", lambda inp: iter([_stub_raw("a1")])
-    )
+    monkeypatch.setattr(srv, "iter_search_jobs", lambda inp: iter([_stub_raw("a1")]))
     seed = client.post("/api/search", json={"titles": ["X"]}).json()
     _wait_for_task(client, seed["task_id"])
 
@@ -495,19 +479,14 @@ def test_tailor_writes_artifacts_under_workspace_jobs_slug_not_double_jobs(
     detail = client.get("/api/jobs/a1").json()
     rel = Path(detail["job_dir_relative"])
     job_dir = workspace_root / rel
-    assert (job_dir / "job.json").is_file(), (
-        f"job.json should be in {job_dir}"
-    )
+    assert (job_dir / "job.json").is_file(), f"job.json should be in {job_dir}"
     assert (job_dir / "resume.md").is_file(), (
-        f"resume.md should sit next to job.json in {job_dir}, "
-        f"not under a doubled jobs/ dir"
+        f"resume.md should sit next to job.json in {job_dir}, " f"not under a doubled jobs/ dir"
     )
-    assert "jobs/jobs/" not in str(job_dir), (
-        f"Doubled jobs/ segment in {job_dir}"
-    )
-    assert not (workspace_root / "jobs" / "jobs").exists(), (
-        f"A 'jobs/jobs/' directory leaked under {workspace_root}"
-    )
+    assert "jobs/jobs/" not in str(job_dir), f"Doubled jobs/ segment in {job_dir}"
+    assert not (
+        workspace_root / "jobs" / "jobs"
+    ).exists(), f"A 'jobs/jobs/' directory leaked under {workspace_root}"
 
 
 def test_tailor_one_returns_400_when_description_empty(
@@ -542,9 +521,7 @@ def test_email_endpoint_works_without_tailored_artifacts(
     client, *_ = app_factory()
     from jobapply import server as srv
 
-    monkeypatch.setattr(
-        srv, "iter_search_jobs", lambda inp: iter([_stub_raw("a1")])
-    )
+    monkeypatch.setattr(srv, "iter_search_jobs", lambda inp: iter([_stub_raw("a1")]))
     seed = client.post("/api/search", json={"titles": ["X"]}).json()
     _wait_for_task(client, seed["task_id"])
     monkeypatch.setattr(srv, "create_chat_model", lambda *a, **kw: object())
@@ -560,9 +537,7 @@ def test_email_endpoint_works_without_tailored_artifacts(
         )
 
     monkeypatch.setattr(srv, "draft_application_email", _fake_drafter)
-    resp = client.post(
-        "/api/jobs/a1/email", json={"recipient": "rec@example.com"}
-    )
+    resp = client.post("/api/jobs/a1/email", json={"recipient": "rec@example.com"})
     assert resp.status_code == 200, resp.text
     final = _wait_for_task(client, resp.json()["task_id"])
     assert final["status"] == "succeeded", final
@@ -585,9 +560,7 @@ def test_email_endpoint_uses_artifacts_when_tailored(
     client, *_ = app_factory()
     from jobapply import server as srv
 
-    monkeypatch.setattr(
-        srv, "iter_search_jobs", lambda inp: iter([_stub_raw("a1")])
-    )
+    monkeypatch.setattr(srv, "iter_search_jobs", lambda inp: iter([_stub_raw("a1")]))
     seed = client.post("/api/search", json={"titles": ["X"]}).json()
     _wait_for_task(client, seed["task_id"])
     monkeypatch.setattr(srv, "create_chat_model", lambda *a, **kw: object())
@@ -631,9 +604,7 @@ def test_email_endpoint_uses_artifacts_when_tailored(
         )
 
     monkeypatch.setattr(srv, "draft_application_email", _fake_drafter)
-    resp = client.post(
-        "/api/jobs/a1/email", json={"recipient": "rec@example.com"}
-    )
+    resp = client.post("/api/jobs/a1/email", json={"recipient": "rec@example.com"})
     assert resp.status_code == 200, resp.text
     final = _wait_for_task(client, resp.json()["task_id"])
     assert final["status"] == "succeeded", final
@@ -658,9 +629,7 @@ def test_email_endpoint_returns_400_when_jd_and_artifacts_missing(
     seed = client.post("/api/search", json={"titles": ["X"]}).json()
     _wait_for_task(client, seed["task_id"])
 
-    resp = client.post(
-        "/api/jobs/e1/email", json={"recipient": "rec@example.com"}
-    )
+    resp = client.post("/api/jobs/e1/email", json={"recipient": "rec@example.com"})
     assert resp.status_code == 400
     assert "description" in resp.json()["detail"].lower()
 
@@ -672,9 +641,7 @@ def test_delete_job_removes_from_catalog(
     client, *_ = app_factory()
     from jobapply import server as srv
 
-    monkeypatch.setattr(
-        srv, "iter_search_jobs", lambda inp: iter([_stub_raw("a1")])
-    )
+    monkeypatch.setattr(srv, "iter_search_jobs", lambda inp: iter([_stub_raw("a1")]))
     seed = client.post("/api/search", json={"titles": ["X"]}).json()
     _wait_for_task(client, seed["task_id"])
     assert client.get("/api/jobs").json()["total"] == 1
@@ -693,14 +660,10 @@ def test_searches_history_records_each_run(
     client, *_ = app_factory()
     from jobapply import server as srv
 
-    monkeypatch.setattr(
-        srv, "iter_search_jobs", lambda inp: iter([_stub_raw("a1")])
-    )
+    monkeypatch.setattr(srv, "iter_search_jobs", lambda inp: iter([_stub_raw("a1")]))
     a = client.post("/api/search", json={"titles": ["A"]}).json()
     _wait_for_task(client, a["task_id"])
-    monkeypatch.setattr(
-        srv, "iter_search_jobs", lambda inp: iter([_stub_raw("b2")])
-    )
+    monkeypatch.setattr(srv, "iter_search_jobs", lambda inp: iter([_stub_raw("b2")]))
     b = client.post("/api/search", json={"titles": ["B"]}).json()
     _wait_for_task(client, b["task_id"])
 
@@ -719,9 +682,7 @@ def test_artifact_endpoint_serves_resume_md(
     client, *_ = app_factory()
     from jobapply import server as srv
 
-    monkeypatch.setattr(
-        srv, "iter_search_jobs", lambda inp: iter([_stub_raw("a1")])
-    )
+    monkeypatch.setattr(srv, "iter_search_jobs", lambda inp: iter([_stub_raw("a1")]))
     seed = client.post("/api/search", json={"titles": ["X"]}).json()
     _wait_for_task(client, seed["task_id"])
 
@@ -732,9 +693,7 @@ def test_artifact_endpoint_serves_resume_md(
 
         jd_path = Path(kwargs["jd_path"])
         job_dir = jd_path.parent
-        (job_dir / "resume.md").write_text(
-            "# Tailored resume body\n", encoding="utf-8"
-        )
+        (job_dir / "resume.md").write_text("# Tailored resume body\n", encoding="utf-8")
         (job_dir / "resume.tex").write_text("R", encoding="utf-8")
         (job_dir / "cover_letter.md").write_text("C", encoding="utf-8")
         (job_dir / "cover_letter.tex").write_text("C", encoding="utf-8")
@@ -766,9 +725,7 @@ def test_artifact_endpoint_rejects_path_traversal(
     client, *_ = app_factory()
     from jobapply import server as srv
 
-    monkeypatch.setattr(
-        srv, "iter_search_jobs", lambda inp: iter([_stub_raw("a1")])
-    )
+    monkeypatch.setattr(srv, "iter_search_jobs", lambda inp: iter([_stub_raw("a1")]))
     seed = client.post("/api/search", json={"titles": ["X"]}).json()
     _wait_for_task(client, seed["task_id"])
 
@@ -785,16 +742,12 @@ def test_artifact_endpoint_rejects_path_traversal(
 # ---------------------------------------------------------------------------
 
 
-def _seed_tailored_job(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> Path:
+def _seed_tailored_job(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Run a stubbed search + tailor so the per-job dir exists and we
     can target the editor endpoints. Returns the job's directory."""
     from jobapply import server as srv
 
-    monkeypatch.setattr(
-        srv, "iter_search_jobs", lambda inp: iter([_stub_raw("edit1")])
-    )
+    monkeypatch.setattr(srv, "iter_search_jobs", lambda inp: iter([_stub_raw("edit1")]))
     seed = client.post("/api/search", json={"titles": ["X"]}).json()
     _wait_for_task(client, seed["task_id"])
     monkeypatch.setattr(srv, "create_chat_model", lambda *a, **kw: object())
@@ -954,9 +907,7 @@ def test_compile_artifact_502_when_backend_returns_none(
     from jobapply import server as srv
 
     monkeypatch.setattr(srv, "probe_tex_pdf_backend", lambda: "tectonic")
-    monkeypatch.setattr(
-        srv, "tex_to_pdf", lambda *a, **kw: None  # type: ignore[arg-type]
-    )
+    monkeypatch.setattr(srv, "tex_to_pdf", lambda *a, **kw: None)  # type: ignore[arg-type]
 
     resp = client.post("/api/jobs/edit1/artifacts/resume.tex/compile")
     assert resp.status_code == 502

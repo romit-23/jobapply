@@ -202,9 +202,7 @@ class TaskManager:
 
     def list_recent(self, limit: int = 50) -> list[TaskRecord]:
         with self._lock:
-            ordered = sorted(
-                self._tasks.values(), key=lambda r: r.created_at, reverse=True
-            )
+            ordered = sorted(self._tasks.values(), key=lambda r: r.created_at, reverse=True)
             return ordered[:limit]
 
     def _gc_old_records_locked(self) -> None:

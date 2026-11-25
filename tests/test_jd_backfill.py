@@ -17,7 +17,7 @@ from jobapply.jd_backfill import (
 )
 
 
-def _make_client(handler: "callable[[httpx.Request], httpx.Response]") -> httpx.Client:
+def _make_client(handler: callable[[httpx.Request], httpx.Response]) -> httpx.Client:
     return httpx.Client(transport=httpx.MockTransport(handler))
 
 
@@ -26,9 +26,7 @@ def test_normalize_linkedin_url_extracts_numeric_id() -> None:
     canonical ``/jobs/view/<numeric>`` form is what JobSpy hits and
     is the most likely to return the JD HTML."""
     assert (
-        _normalize_linkedin_url(
-            "https://www.linkedin.com/jobs/view/etl-sql-at-pwc-4408659493"
-        )
+        _normalize_linkedin_url("https://www.linkedin.com/jobs/view/etl-sql-at-pwc-4408659493")
         == "https://www.linkedin.com/jobs/view/4408659493"
     )
     assert (
@@ -69,13 +67,14 @@ def test_fetch_description_from_url_extracts_linkedin_markup() -> None:
 
     def _handler(request: httpx.Request) -> httpx.Response:
         # Confirm the LinkedIn-specific UA + Accept headers got through.
-        assert "linkedin.com" in request.headers["user-agent"].lower() or "Chrome" in request.headers["user-agent"]
+        assert (
+            "linkedin.com" in request.headers["user-agent"].lower()
+            or "Chrome" in request.headers["user-agent"]
+        )
         return httpx.Response(200, text=html)
 
     with _make_client(_handler) as c:
-        out = fetch_description_from_url(
-            "https://www.linkedin.com/jobs/view/4408659493", client=c
-        )
+        out = fetch_description_from_url("https://www.linkedin.com/jobs/view/4408659493", client=c)
     assert out is not None
     assert "Senior backend engineer" in out
     assert "Sign in" not in out
@@ -101,9 +100,7 @@ def test_fetch_description_from_url_returns_none_on_authwall() -> None:
         )
 
     with _make_client(_redirecting) as c:
-        out = fetch_description_from_url(
-            "https://www.linkedin.com/jobs/view/4408659493", client=c
-        )
+        out = fetch_description_from_url("https://www.linkedin.com/jobs/view/4408659493", client=c)
     assert out is None
 
 
@@ -113,9 +110,7 @@ def test_fetch_description_from_url_returns_none_on_4xx() -> None:
 
     with _make_client(_handler) as c:
         assert (
-            fetch_description_from_url(
-                "https://www.indeed.com/viewjob?jk=missing", client=c
-            )
+            fetch_description_from_url("https://www.indeed.com/viewjob?jk=missing", client=c)
             is None
         )
 
@@ -125,12 +120,7 @@ def test_fetch_description_from_url_returns_none_on_network_error() -> None:
         raise httpx.ConnectError("boom", request=request)
 
     with _make_client(_handler) as c:
-        assert (
-            fetch_description_from_url(
-                "https://www.linkedin.com/jobs/view/1", client=c
-            )
-            is None
-        )
+        assert fetch_description_from_url("https://www.linkedin.com/jobs/view/1", client=c) is None
 
 
 def test_fetch_description_from_url_uses_indeed_selector() -> None:
@@ -150,9 +140,7 @@ def test_fetch_description_from_url_uses_indeed_selector() -> None:
         return httpx.Response(200, text=html)
 
     with _make_client(_handler) as c:
-        out = fetch_description_from_url(
-            "https://www.indeed.com/viewjob?jk=abc", client=c
-        )
+        out = fetch_description_from_url("https://www.indeed.com/viewjob?jk=abc", client=c)
     assert out is not None
     assert "data engineer with strong SQL" in out
 
@@ -173,9 +161,7 @@ def test_fetch_description_from_url_falls_back_to_article() -> None:
         return httpx.Response(200, text=html)
 
     with _make_client(_handler) as c:
-        out = fetch_description_from_url(
-            "https://careers.example.com/job/123", client=c
-        )
+        out = fetch_description_from_url("https://careers.example.com/job/123", client=c)
     assert out is not None
     assert "generic-host extractor" in out
 
@@ -190,9 +176,4 @@ def test_fetch_description_returns_none_when_text_too_short() -> None:
         return httpx.Response(200, text=html)
 
     with _make_client(_handler) as c:
-        assert (
-            fetch_description_from_url(
-                "https://careers.example.com/job/1", client=c
-            )
-            is None
-        )
+        assert fetch_description_from_url("https://careers.example.com/job/1", client=c) is None

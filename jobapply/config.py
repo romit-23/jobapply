@@ -9,9 +9,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-ProviderName = Literal[
-    "gemini", "anthropic", "openai", "ollama", "cloudflare", "openrouter"
-]
+ProviderName = Literal["gemini", "anthropic", "openai", "ollama", "cloudflare", "openrouter"]
 PROVIDER_NAMES: tuple[ProviderName, ...] = (
     "gemini",
     "anthropic",

@@ -15,6 +15,7 @@ SPA's client-side router can handle it.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import threading
 from datetime import UTC, datetime
@@ -44,7 +45,6 @@ from jobapply.jd_extract import extract_application_hints
 from jobapply.llm import create_chat_model
 from jobapply.models import (
     ApplicationHints,
-    EmailDraft,
     FitScore,
     JobArtifacts,
     JobRecord,
@@ -61,10 +61,9 @@ from jobapply.profile import (
     profile_to_text,
 )
 from jobapply.tailor_one import (
-    TailorEmailRequest,
     tailor_for_job_description,
 )
-from jobapply.tasks import TaskHandle, TaskManager, TaskStatus, get_default_manager
+from jobapply.tasks import TaskHandle, TaskManager, get_default_manager
 from jobapply.utils import slugify, stable_job_id
 from jobapply.workspace import Workspace
 
@@ -226,8 +225,7 @@ def _load_profile(ctx: ServerContext) -> tuple[Profile, str, list[str], Path]:
         raise HTTPException(
             status_code=400,
             detail=(
-                f"profile.json not found at {p}. Run `jobapply init --resume "
-                "<path>` first."
+                f"profile.json not found at {p}. Run `jobapply init --resume " "<path>` first."
             ),
         )
     try:
@@ -321,9 +319,7 @@ def _resolve_provider_model(
         )
     mdl = (model or cfg.resolved_model(prov) or "").strip()
     if not mdl:
-        raise HTTPException(
-            status_code=400, detail=f"No model configured for provider '{prov}'."
-        )
+        raise HTTPException(status_code=400, detail=f"No model configured for provider '{prov}'.")
     return prov, mdl
 
 
@@ -441,9 +437,7 @@ def _mount_static(app: FastAPI, dist: Path) -> None:
     """Mount the Vite build output and add a SPA catch-all."""
     assets_dir = dist / "assets"
     if assets_dir.is_dir():
-        app.mount(
-            "/assets", StaticFiles(directory=str(assets_dir)), name="static-assets"
-        )
+        app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="static-assets")
 
     index_html = dist / "index.html"
 
@@ -506,9 +500,7 @@ def _register_routes(app: FastAPI) -> None:
                 profile_name = load_profile(prof_path).name
             except ProfileLoadError:
                 profile_loaded = False
-        web_dist = (
-            (Path(__file__).parent / WEB_DIST_DIRNAME / "index.html").is_file()
-        )
+        web_dist = (Path(__file__).parent / WEB_DIST_DIRNAME / "index.html").is_file()
         return StatusResponse(
             workspace=str(ctx.workspace.path),
             workspace_total_jobs=ctx.workspace.count(),
@@ -562,11 +554,8 @@ def _register_routes(app: FastAPI) -> None:
                 {
                     "name": name,
                     "configured": name in cfg.providers,
-                    "has_credentials": (
-                        name == "ollama" or bool(get_api_key(cfg, name))
-                    ),
-                    "default_model": pcfg.model
-                    or DEFAULT_MODELS.get(name, ""),
+                    "has_credentials": (name == "ollama" or bool(get_api_key(cfg, name))),
+                    "default_model": pcfg.model or DEFAULT_MODELS.get(name, ""),
                     "fallback_model": DEFAULT_MODELS.get(name, ""),
                 }
             )
@@ -664,9 +653,7 @@ def _register_routes(app: FastAPI) -> None:
         # Sanity-check the body length so a hung paste doesn't blow up
         # the server. 1 MB is a generous limit for LaTeX sources.
         if len(payload.content) > 1_000_000:
-            raise HTTPException(
-                status_code=413, detail="Artifact content too large (>1 MB)."
-            )
+            raise HTTPException(status_code=413, detail="Artifact content too large (>1 MB).")
         job_dir = _resolve_job_dir(ws, record)
         job_dir.mkdir(parents=True, exist_ok=True)
         path = job_dir / name
@@ -680,9 +667,7 @@ def _register_routes(app: FastAPI) -> None:
         }
 
     @app.post("/api/jobs/{job_id}/artifacts/{name}/compile")
-    def compile_artifact(
-        job_id: str, name: str, request: Request
-    ) -> dict[str, Any]:
+    def compile_artifact(job_id: str, name: str, request: Request) -> dict[str, Any]:
         ctx: ServerContext = request.app.state.ctx
         ws = ctx.workspace
         record = ws.get(job_id)
@@ -747,14 +732,10 @@ def _register_routes(app: FastAPI) -> None:
         job_dir = _resolve_job_dir(ws, record)
         if job_dir.is_dir():
             for child in job_dir.iterdir():
-                try:
+                with contextlib.suppress(OSError):
                     child.unlink()
-                except OSError:
-                    pass
-            try:
+            with contextlib.suppress(OSError):
                 job_dir.rmdir()
-            except OSError:
-                pass
         from sqlmodel import Session
 
         from jobapply.workspace import WorkspaceJobEntry
@@ -782,9 +763,7 @@ def _register_routes(app: FastAPI) -> None:
                     "provider": r.provider,
                     "model": r.model,
                     "started_at": r.started_at.isoformat() if r.started_at else None,
-                    "finished_at": (
-                        r.finished_at.isoformat() if r.finished_at else None
-                    ),
+                    "finished_at": (r.finished_at.isoformat() if r.finished_at else None),
                     "fetched": r.fetched,
                     "new_jobs": r.new_jobs,
                     "duplicate_jobs": r.duplicate_jobs,
@@ -798,9 +777,7 @@ def _register_routes(app: FastAPI) -> None:
     @app.get("/api/tasks")
     def list_tasks(request: Request, limit: int = 25) -> dict[str, Any]:
         ctx: ServerContext = request.app.state.ctx
-        return {
-            "tasks": [r.to_dict() for r in ctx.task_manager.list_recent(limit=limit)]
-        }
+        return {"tasks": [r.to_dict() for r in ctx.task_manager.list_recent(limit=limit)]}
 
     @app.get("/api/tasks/{task_id}")
     def get_task(task_id: str, request: Request) -> dict[str, Any]:
@@ -815,9 +792,7 @@ def _register_routes(app: FastAPI) -> None:
         ctx: ServerContext = request.app.state.ctx
         ok = ctx.task_manager.cancel(task_id)
         if not ok:
-            raise HTTPException(
-                status_code=409, detail="Task already finished or unknown."
-            )
+            raise HTTPException(status_code=409, detail="Task already finished or unknown.")
         return {"cancelled": task_id}
 
     # --------- search ----------
@@ -846,9 +821,7 @@ def _register_routes(app: FastAPI) -> None:
         profile_text = ""
         skill_list = list(payload.skills)
         if payload.score:
-            prov, mdl = _resolve_provider_model(
-                cfg, provider=payload.provider, model=payload.model
-            )
+            prov, mdl = _resolve_provider_model(cfg, provider=payload.provider, model=payload.model)
             _, profile_text, _, _ = _load_profile(ctx)
 
         search_id = ws.start_search(
@@ -888,9 +861,7 @@ def _register_routes(app: FastAPI) -> None:
                                 )
                                 record = _record_from_raw_job(raw, fit=fit)
                             except Exception as exc:  # noqa: BLE001
-                                record = _record_from_raw_job(
-                                    raw, error=f"score failed: {exc}"
-                                )
+                                record = _record_from_raw_job(raw, error=f"score failed: {exc}")
                         inserted = ws.upsert_job(record, search_id=search_id)
                         if inserted:
                             new_count += 1
@@ -921,9 +892,7 @@ def _register_routes(app: FastAPI) -> None:
                     model=mdl,
                 )
             handle.set_percent(100.0)
-            handle.set_label(
-                f"Done: {new_count} new, {duplicate_count} duplicate"
-            )
+            handle.set_label(f"Done: {new_count} new, {duplicate_count} duplicate")
             return {
                 "search_id": search_id,
                 "fetched": fetched,
@@ -950,9 +919,7 @@ def _register_routes(app: FastAPI) -> None:
         ws = ctx.workspace
         cfg = ctx.cfg
 
-        prov, mdl = _resolve_provider_model(
-            cfg, provider=payload.provider, model=payload.model
-        )
+        prov, mdl = _resolve_provider_model(cfg, provider=payload.provider, model=payload.model)
         profile_obj, profile_text, profile_skills, profile_path = _load_profile(ctx)
 
         # Validate every requested job_id up front so the task surfaces
@@ -1028,9 +995,7 @@ def _register_routes(app: FastAPI) -> None:
                 model=mdl,
             )
             handle.set_percent(100.0)
-            handle.set_label(
-                f"Done: {done} tailored, {skipped} skipped, {failed} failed"
-            )
+            handle.set_label(f"Done: {done} tailored, {skipped} skipped, {failed} failed")
             return {
                 "search_id": search_id,
                 "tailored": done,
@@ -1038,17 +1003,13 @@ def _register_routes(app: FastAPI) -> None:
                 "skipped": skipped,
             }
 
-        record = ctx.task_manager.submit(
-            "run", _job, metadata={"job_ids": payload.job_ids}
-        )
+        record = ctx.task_manager.submit("run", _job, metadata={"job_ids": payload.job_ids})
         return record.to_dict()
 
     # --------- single tailor ----------
 
     @app.post("/api/jobs/{job_id}/tailor")
-    def post_tailor(
-        job_id: str, payload: TailorOneRequest, request: Request
-    ) -> dict[str, Any]:
+    def post_tailor(job_id: str, payload: TailorOneRequest, request: Request) -> dict[str, Any]:
         ctx: ServerContext = request.app.state.ctx
         ws = ctx.workspace
         cfg = ctx.cfg
@@ -1064,9 +1025,7 @@ def _register_routes(app: FastAPI) -> None:
                     "the Freeform route."
                 ),
             )
-        prov, mdl = _resolve_provider_model(
-            cfg, provider=payload.provider, model=payload.model
-        )
+        prov, mdl = _resolve_provider_model(cfg, provider=payload.provider, model=payload.model)
         profile_obj, profile_text, profile_skills, profile_path = _load_profile(ctx)
 
         def _job(handle: TaskHandle) -> dict[str, Any]:
@@ -1094,23 +1053,17 @@ def _register_routes(app: FastAPI) -> None:
             handle.set_label("Tailored.")
             return {"job": _serialize_record(new_record, ws)}
 
-        record_h = ctx.task_manager.submit(
-            "tailor", _job, metadata={"job_id": job_id}
-        )
+        record_h = ctx.task_manager.submit("tailor", _job, metadata={"job_id": job_id})
         return record_h.to_dict()
 
     # --------- freeform paste ----------
 
     @app.post("/api/freeform")
-    def post_freeform(
-        payload: FreeformRequest, request: Request
-    ) -> dict[str, Any]:
+    def post_freeform(payload: FreeformRequest, request: Request) -> dict[str, Any]:
         ctx: ServerContext = request.app.state.ctx
         ws = ctx.workspace
         cfg = ctx.cfg
-        prov, mdl = _resolve_provider_model(
-            cfg, provider=payload.provider, model=payload.model
-        )
+        prov, mdl = _resolve_provider_model(cfg, provider=payload.provider, model=payload.model)
         profile_obj, profile_text, profile_skills, profile_path = _load_profile(ctx)
 
         def _job(handle: TaskHandle) -> dict[str, Any]:
@@ -1142,17 +1095,13 @@ def _register_routes(app: FastAPI) -> None:
             handle.set_label("Done.")
             return {"job": _serialize_record(new_record, ws)}
 
-        record_h = ctx.task_manager.submit(
-            "freeform", _job, metadata={"title": payload.title}
-        )
+        record_h = ctx.task_manager.submit("freeform", _job, metadata={"title": payload.title})
         return record_h.to_dict()
 
     # --------- email drafting ----------
 
     @app.post("/api/jobs/{job_id}/email")
-    def post_email(
-        job_id: str, payload: EmailRequest, request: Request
-    ) -> dict[str, Any]:
+    def post_email(job_id: str, payload: EmailRequest, request: Request) -> dict[str, Any]:
         ctx: ServerContext = request.app.state.ctx
         ws = ctx.workspace
         cfg = ctx.cfg
@@ -1163,9 +1112,7 @@ def _register_routes(app: FastAPI) -> None:
         # for the drafter to produce a grounded email. We bail only
         # when both are missing so we don't ask the model to make up
         # the role from thin air.
-        has_artifacts = (
-            record.tailored_resume is not None and record.cover_letter is not None
-        )
+        has_artifacts = record.tailored_resume is not None and record.cover_letter is not None
         if not has_artifacts and not (record.description or "").strip():
             raise HTTPException(
                 status_code=400,
@@ -1175,9 +1122,7 @@ def _register_routes(app: FastAPI) -> None:
                     "via the Freeform route."
                 ),
             )
-        prov, mdl = _resolve_provider_model(
-            cfg, provider=payload.provider, model=payload.model
-        )
+        prov, mdl = _resolve_provider_model(cfg, provider=payload.provider, model=payload.model)
         _, profile_text, _, _ = _load_profile(ctx)
 
         def _job(handle: TaskHandle) -> dict[str, Any]:
@@ -1211,9 +1156,7 @@ def _register_routes(app: FastAPI) -> None:
                 "saved_to": "email.txt",
             }
 
-        record_h = ctx.task_manager.submit(
-            "email", _job, metadata={"job_id": job_id}
-        )
+        record_h = ctx.task_manager.submit("email", _job, metadata={"job_id": job_id})
         return record_h.to_dict()
 
     @app.get("/api/jobs/{job_id}/email-hint")
@@ -1295,20 +1238,16 @@ def _tailor_record(
             "job_json": str(job_json.resolve()),
             "resume_md": str(outputs.resume_md.resolve()),
             "resume_tex": str(outputs.resume_tex.resolve()),
-            "resume_pdf": str(outputs.resume_pdf.resolve())
-            if outputs.resume_pdf
-            else None,
-            "resume_latex_pdf": str(outputs.resume_latex_pdf.resolve())
-            if outputs.resume_latex_pdf
-            else None,
+            "resume_pdf": str(outputs.resume_pdf.resolve()) if outputs.resume_pdf else None,
+            "resume_latex_pdf": (
+                str(outputs.resume_latex_pdf.resolve()) if outputs.resume_latex_pdf else None
+            ),
             "cover_letter_md": str(outputs.cover_md.resolve()),
             "cover_letter_tex": str(outputs.cover_tex.resolve()),
-            "cover_letter_pdf": str(outputs.cover_pdf.resolve())
-            if outputs.cover_pdf
-            else None,
-            "cover_letter_latex_pdf": str(outputs.cover_latex_pdf.resolve())
-            if outputs.cover_latex_pdf
-            else None,
+            "cover_letter_pdf": str(outputs.cover_pdf.resolve()) if outputs.cover_pdf else None,
+            "cover_letter_latex_pdf": (
+                str(outputs.cover_latex_pdf.resolve()) if outputs.cover_latex_pdf else None
+            ),
         }
     )
 

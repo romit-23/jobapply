@@ -299,9 +299,7 @@ def _education_latex(education: list[EducationItem]) -> str:
         school_label = e.school
         if e.location.strip():
             school_label = (
-                f"{e.school}, {e.location.strip()}"
-                if e.school.strip()
-                else e.location.strip()
+                f"{e.school}, {e.location.strip()}" if e.school.strip() else e.location.strip()
             )
         parts.append(rf"\headingBf{{{latex_escape(school_label)}}}{{{latex_escape(e.dates)}}}")
         right = ""

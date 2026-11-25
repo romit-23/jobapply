@@ -16,7 +16,6 @@ from jobapply.jd_extract import (
     hints_to_email_context,
 )
 
-
 PWC_JD = """
 Hi everyone!!!
 Greeting from
@@ -29,7 +28,7 @@ Please Send your resume to
 kirthana.xx.tpr@pwc.com
 Please mention subject line as Job Application- Skillset
 ETL + SQL (4 to 8 years of experience) Location: Mumbai
-"""
+"""  # noqa: E501
 
 
 def test_extract_emails_dedupes_and_lowercases() -> None:
@@ -55,9 +54,7 @@ def test_extract_emails_handles_empty_or_none() -> None:
 def test_extract_subject_line_pwc_pattern() -> None:
     """The original motivating example: 'mention subject line as ...'."""
     assert (
-        extract_subject_line(
-            "Please mention subject line as Job Application- Skillset"
-        )
+        extract_subject_line("Please mention subject line as Job Application- Skillset")
         == "Job Application- Skillset"
     )
 
@@ -71,9 +68,7 @@ def test_extract_subject_line_with_quotes() -> None:
 
 def test_extract_subject_line_smart_quotes() -> None:
     assert (
-        extract_subject_line(
-            "Please mention subject line as \u201cJob Application Skillset\u201d"
-        )
+        extract_subject_line("Please mention subject line as \u201cJob Application Skillset\u201d")
         == "Job Application Skillset"
     )
 

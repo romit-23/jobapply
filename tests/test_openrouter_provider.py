@@ -71,9 +71,7 @@ def test_get_base_url_honors_openrouter_env_override(monkeypatch: pytest.MonkeyP
 
 
 def test_get_base_url_honors_openrouter_config_override() -> None:
-    cfg = AppConfig(
-        providers={"openrouter": ProviderConfig(base_url="https://custom.test/v1")}
-    )
+    cfg = AppConfig(providers={"openrouter": ProviderConfig(base_url="https://custom.test/v1")})
     assert get_base_url(cfg, "openrouter") == "https://custom.test/v1"
 
 

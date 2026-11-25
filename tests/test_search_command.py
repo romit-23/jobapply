@@ -60,11 +60,11 @@ def _write_minimal_profile(path: Path) -> None:
 def _write_minimal_toml(path: Path, *, provider: str = "openai") -> None:
     path.write_text(
         f'provider = "{provider}"\n'
-        f"profile_path = \"profile.json\"\n"
+        f'profile_path = "profile.json"\n'
         f'output_dir = "output"\n'
         f"results_wanted = 5\n"
         f"hours_old = 24\n"
-        f"sites = [\"indeed\"]\n"
+        f'sites = ["indeed"]\n'
         f"[providers.{provider}]\n"
         f'api_key = "test-key"\n'
         f'model = "test-model"\n',
@@ -175,9 +175,7 @@ def test_search_no_jobs_still_writes_empty_csv(
     _write_minimal_toml(tmp_path / "jobapply.toml")
 
     monkeypatch.setattr(cli_module, "iter_search_jobs", lambda inp: iter([]))
-    result = CliRunner().invoke(
-        app, ["search", "--titles", "Nonexistent Role", "--yes"]
-    )
+    result = CliRunner().invoke(app, ["search", "--titles", "Nonexistent Role", "--yes"])
     assert result.exit_code == 0, result.output
 
     csv_path = next((tmp_path / "output").glob("search-*/jobs.csv"))
@@ -335,9 +333,7 @@ def test_search_per_job_json_includes_fit_score_when_scored(
         lambda *a, **kw: FitScore(score=0.77, rationale="strong"),
     )
 
-    result = CliRunner().invoke(
-        app, ["search", "--titles", "X", "--score", "--yes"]
-    )
+    result = CliRunner().invoke(app, ["search", "--titles", "X", "--score", "--yes"])
     assert result.exit_code == 0, result.output
 
     job_json = next((tmp_path / "output").glob("search-*/jobs/*/job.json"))
@@ -383,9 +379,7 @@ def test_search_persists_jobs_incrementally_during_fetch(
     assert captured_sizes == [1, 2]
 
     # And the final state contains all three.
-    final = json.loads(
-        next((tmp_path / "output").glob("search-*/jobs.json")).read_text()
-    )
+    final = json.loads(next((tmp_path / "output").glob("search-*/jobs.json")).read_text())
     assert {j["job_id"] for j in final["jobs"]} == {"a1", "b2", "c3"}
 
 
@@ -418,9 +412,7 @@ def test_search_persists_score_results_incrementally(
 
     monkeypatch.setattr(cli_module, "score_fit", _fake_score)
 
-    result = CliRunner().invoke(
-        app, ["search", "--titles", "X", "--score", "--yes"]
-    )
+    result = CliRunner().invoke(app, ["search", "--titles", "X", "--score", "--yes"])
     assert result.exit_code == 0, result.output
 
     # Call 0 sees 0 fits on disk, call 1 sees 1, call 2 sees 2 — proving
@@ -457,10 +449,13 @@ def test_search_uses_explicit_provider_and_model_overrides(
         app,
         [
             "search",
-            "--titles", "X",
+            "--titles",
+            "X",
             "--score",
-            "--provider", "anthropic",
-            "--model", "claude-3-5-sonnet",
+            "--provider",
+            "anthropic",
+            "--model",
+            "claude-3-5-sonnet",
             "--yes",
         ],
     )

@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TypeVar
-
-from typing import Any
+from typing import Any, TypeVar
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from pydantic import BaseModel
