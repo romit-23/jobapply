@@ -24,6 +24,7 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -370,6 +371,22 @@ def _record_to_raw_job(record: JobRecord) -> RawJob:
 # ---------------------------- App factory ----------------------------------- #
 
 
+# Loopback names the UI is reachable on by default. The Host header is
+# checked against these so a DNS-rebinding page (evil.example resolving
+# to 127.0.0.1) can't talk to the API from the victim's browser.
+LOOPBACK_HOSTS = ["127.0.0.1", "localhost"]
+
+# Browser origins allowed to call the API cross-origin (Vite dev server).
+DEV_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
+
+# Every state-changing request must carry this header. Browsers can't add
+# a custom header cross-origin without a CORS preflight, which only
+# DEV_ORIGINS pass, so this blocks CSRF from arbitrary websites (e.g. a
+# form POST to /api/run that would spend the user's LLM credits).
+CSRF_HEADER = "X-JobApply-Client"
+_SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+
 def create_app(
     *,
     cwd: Path | None = None,
@@ -377,11 +394,16 @@ def create_app(
     task_manager: TaskManager | None = None,
     web_dist: Path | None = None,
     enable_cors: bool = True,
+    allowed_hosts: list[str] | None = None,
 ) -> FastAPI:
     """Construct the FastAPI app.
 
     The factory pattern lets tests inject a fresh ``cwd`` /
     ``task_manager`` per test case without globals.
+
+    ``allowed_hosts`` restricts the ``Host`` header (defaults to
+    :data:`LOOPBACK_HOSTS`); pass ``["*"]`` only when deliberately
+    exposing the UI on a network interface.
     """
     load_dotenv_if_present()
     root = (cwd or Path.cwd()).resolve()
@@ -401,16 +423,36 @@ def create_app(
     )
 
     app = FastAPI(title="JobApply", version="0.1.0")
+
+    @app.middleware("http")
+    async def _csrf_guard(request: Request, call_next: Any) -> Any:
+        if request.url.path.startswith("/api/") and request.method not in _SAFE_METHODS:
+            if request.headers.get(CSRF_HEADER) is None:
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": f"Missing {CSRF_HEADER} header."},
+                )
+            origin = request.headers.get("origin")
+            if origin is not None:
+                same_origin = origin.split("://", 1)[-1] == request.headers.get("host")
+                if not same_origin and origin not in DEV_ORIGINS:
+                    return JSONResponse(
+                        status_code=403,
+                        content={"detail": "Cross-origin request rejected."},
+                    )
+        return await call_next(request)
+
+    app.add_middleware(
+        TrustedHostMiddleware,
+        allowed_hosts=allowed_hosts if allowed_hosts is not None else LOOPBACK_HOSTS,
+    )
     if enable_cors:
         # The Vite dev server runs on :5173 and proxies /api → :8000.
         # Allowing localhost:* keeps that flow working without
         # special-casing ports.
         app.add_middleware(
             CORSMiddleware,
-            allow_origins=[
-                "http://localhost:5173",
-                "http://127.0.0.1:5173",
-            ],
+            allow_origins=DEV_ORIGINS,
             allow_credentials=True,
             allow_methods=["*"],
             allow_headers=["*"],

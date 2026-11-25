@@ -6,6 +6,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- **Remote LaTeX compilation is now opt-in.** `[latex_api] enabled` defaults
+  to `false`, and `render.tex_to_pdf` treats an unset
+  `JOBAPPLY_LATEX_API_DISABLE` as disabled, so tailored resumes are no longer
+  uploaded to `latex.ytotech.com` unless you choose to. `jobapply init` asks.
+  **Upgrading:** if you relied on the remote service and your
+  `jobapply.toml` has no explicit `[latex_api] enabled = true`, add it (or
+  install `tectonic`).
+- **Web UI API hardened against malicious websites.** `jobapply ui` now
+  rejects requests whose `Host` header isn't `127.0.0.1`/`localhost`
+  (blocks DNS rebinding), and POST/PUT/DELETE under `/api/` require an
+  `X-JobApply-Client` header plus a same-origin (or Vite dev) `Origin`
+  (blocks CSRF, e.g. a page silently starting a paid `/api/run`). Binding
+  `--host 0.0.0.0` disables the Host check and prints a warning.
+- **Local `pdflatex` compiles run sandboxed.** `-no-shell-escape` plus
+  kpathsea paranoid mode (`openin_any=p`, `openout_any=p`, `TEXMFOUTPUT` =
+  job dir), so a `.tex` edited in the browser can no longer `\input` files
+  from elsewhere on disk into the PDF.
+
 ### Added
 - Jobs dashboard sorting by fit or title, visible-result batch selection,
   status counts, and controls to clear filters and selection.

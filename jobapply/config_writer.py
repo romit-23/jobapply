@@ -149,23 +149,23 @@ def _latex_api_block(la: LatexApiConfig) -> str:
     commented so the file stays minimal for users who don't care.
     """
     is_default = (
-        la.enabled
+        not la.enabled
         and la.url == DEFAULT_LATEX_API_URL
         and la.compiler == "pdflatex"
         and la.timeout == DEFAULT_LATEX_API_TIMEOUT
     )
     header = (
-        "\n# LaTeX → PDF compile service. By default jobapply POSTs your\n"
-        "# tailored .tex to a hosted latex-on-http instance and writes the\n"
-        "# returned PDF — no local TeX install required. Falls back to\n"
-        "# `tectonic`/`pdflatex` if disabled or unreachable. Self-host with:\n"
+        "\n# LaTeX → PDF compile service (opt-in). When enabled, jobapply POSTs\n"
+        "# your tailored .tex — i.e. your resume content — to a latex-on-http\n"
+        "# instance. Off by default: local `tectonic`/`pdflatex` are used, and\n"
+        "# Markdown PDFs are always produced. Self-host to keep data local:\n"
         "#   docker run -d -p 8080:8080 yotools/latex-on-http\n"
     )
     if is_default:
         return (
             header
             + "# [latex_api]\n"
-            + "# enabled = true\n"
+            + "# enabled = false\n"
             + f'# url = "{DEFAULT_LATEX_API_URL}"\n'
             + '# compiler = "pdflatex"\n'
             + f"# timeout = {DEFAULT_LATEX_API_TIMEOUT}\n"

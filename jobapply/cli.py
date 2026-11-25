@@ -464,6 +464,19 @@ def _interactive_config(existing: AppConfig | None) -> AppConfig:
         or base.output_dir
     )
 
+    latex_api = base.latex_api
+    if not latex_api.enabled:
+        use_remote_latex = questionary.confirm(
+            "Compile styled LaTeX PDFs via the public latex-on-http service "
+            f"({latex_api.url})? This UPLOADS your tailored resume and cover "
+            "letter. Say no to use local tectonic/pdflatex instead.",
+            default=False,
+        ).ask()
+        if use_remote_latex is None:
+            raise typer.Exit(1)
+        if use_remote_latex:
+            latex_api = latex_api.model_copy(update={"enabled": True})
+
     # Migrate legacy `profile.md` configs to the new JSON filename so the
     # next `init` writes profile.json AND the toml points at it. Custom
     # paths that aren't the literal default are preserved — power users who
@@ -484,7 +497,7 @@ def _interactive_config(existing: AppConfig | None) -> AppConfig:
         output_dir=output_dir,
         ledger_path=base.ledger_path,
         providers=providers,
-        latex_api=base.latex_api,
+        latex_api=latex_api,
     )
 
 
@@ -870,7 +883,21 @@ def ui_cmd(
         if not ws_path.is_absolute():
             ws_path = cwd / ws_path
 
-    app_obj = create_app(cwd=cwd, workspace_path=ws_path)
+    from jobapply.server import LOOPBACK_HOSTS
+
+    allowed_hosts: list[str] | None = None
+    if host not in {*LOOPBACK_HOSTS, "::1"}:
+        # Binding a real interface: the Host header will be the machine's
+        # LAN name/IP, which we can't enumerate. The API has no login, so
+        # make the exposure explicit.
+        allowed_hosts = ["*"]
+        console.print(
+            f"[bold yellow]Warning:[/bold yellow] binding to {host} exposes the "
+            "JobApply API (your profile, resumes, and LLM credits) to anyone "
+            "who can reach this machine. There is no login. Use only on "
+            "trusted networks."
+        )
+    app_obj = create_app(cwd=cwd, workspace_path=ws_path, allowed_hosts=allowed_hosts)
     dist = Path(__file__).parent / WEB_DIST_DIRNAME
     bundle_present = (dist / "index.html").is_file()
     if not bundle_present:

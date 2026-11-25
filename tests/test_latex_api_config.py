@@ -15,7 +15,8 @@ from jobapply.config import (
 
 def test_latex_api_defaults() -> None:
     cfg = AppConfig()
-    assert cfg.latex_api.enabled is True
+    # Opt-in: the remote API receives resume content.
+    assert cfg.latex_api.enabled is False
     assert cfg.latex_api.url == DEFAULT_LATEX_API_URL
     assert cfg.latex_api.compiler == "pdflatex"
     assert cfg.latex_api.timeout == DEFAULT_LATEX_API_TIMEOUT
@@ -57,7 +58,7 @@ def test_apply_latex_api_env_does_not_clobber_existing(
     monkeypatch.setenv("JOBAPPLY_LATEX_API_URL", "https://override.test/build")
     monkeypatch.delenv("JOBAPPLY_LATEX_API_DISABLE", raising=False)
 
-    cfg = AppConfig(latex_api=LatexApiConfig(url="http://from-toml/build"))
+    cfg = AppConfig(latex_api=LatexApiConfig(enabled=True, url="http://from-toml/build"))
     apply_latex_api_env(cfg)
 
     import os

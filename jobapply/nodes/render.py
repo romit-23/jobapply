@@ -680,11 +680,13 @@ def probe_md_pdf_backend() -> str:
 # --- LaTeX → PDF ----------------------------------------------------------- #
 #
 # Strategy (in order):
-#   1. Remote latex-on-http API — no local TeX install needed.
+#   1. Remote latex-on-http API — OPT-IN (it uploads resume content).
 #      Configurable via env vars so deployments and CI pick up overrides
 #      without touching the rendering layer:
 #        JOBAPPLY_LATEX_API_URL       (defaults to the public ytotech.com instance)
-#        JOBAPPLY_LATEX_API_DISABLE   (set to "1" to skip the remote step entirely)
+#        JOBAPPLY_LATEX_API_DISABLE   (remote step runs only when this is
+#                                      explicitly "0"/"false"/"no"/"off";
+#                                      unset means disabled)
 #        JOBAPPLY_LATEX_API_COMPILER  (pdflatex | xelatex | lualatex | latexmk)
 #        JOBAPPLY_LATEX_API_TIMEOUT   (seconds)
 #   2. Local `tectonic`  — auto-fetches missing packages, single binary.
@@ -695,12 +697,15 @@ def probe_md_pdf_backend() -> str:
 
 DEFAULT_LATEX_API_URL = "https://latex.ytotech.com/builds/sync"
 DEFAULT_LATEX_API_TIMEOUT = 120.0
-_LATEX_DISABLED_VALUES = {"1", "true", "yes", "on"}
+_LATEX_ENABLED_VALUES = {"0", "false", "no", "off"}
 
 
 def _latex_api_disabled() -> bool:
+    # Fail closed: the remote API receives resume content, so it only runs
+    # when explicitly enabled (``apply_latex_api_env`` writes "0" when the
+    # user opted in via ``[latex_api] enabled = true``).
     raw = os.environ.get("JOBAPPLY_LATEX_API_DISABLE", "").strip().lower()
-    return raw in _LATEX_DISABLED_VALUES
+    return raw not in _LATEX_ENABLED_VALUES
 
 
 def _latex_api_url() -> str:
@@ -787,12 +792,29 @@ def _tex_to_pdf_pdflatex(tex_path: Path, out_dir: Path) -> Path | None:
     pdflatex = shutil.which("pdflatex")
     if not pdflatex:
         return None
+    # The .tex may have been edited in the web UI, so treat it as untrusted:
+    # no shell escape, and kpathsea "paranoid" mode so \input{/abs/path}
+    # can't embed arbitrary local files (e.g. ~/.ssh keys) into the PDF.
+    # TEXMFOUTPUT whitelists the job dir, which holds the .tex itself.
+    env = {
+        **os.environ,
+        "openin_any": "p",
+        "openout_any": "p",
+        "TEXMFOUTPUT": str(out_dir.resolve()),
+    }
     try:
         proc = subprocess.run(
-            [pdflatex, "-interaction=nonstopmode", f"-output-directory={out_dir}", str(tex_path)],
+            [
+                pdflatex,
+                "-no-shell-escape",
+                "-interaction=nonstopmode",
+                f"-output-directory={out_dir}",
+                str(tex_path),
+            ],
             capture_output=True,
             text=True,
             timeout=120,
+            env=env,
         )
     except (OSError, subprocess.TimeoutExpired):
         return None

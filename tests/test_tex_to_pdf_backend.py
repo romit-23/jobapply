@@ -2,12 +2,12 @@
 
 The chain order is:
 
-1. Remote ``latex-on-http`` HTTP API (default).
+1. Remote ``latex-on-http`` HTTP API (opt-in).
 2. Local ``tectonic``.
 3. Local ``pdflatex``.
 
-The remote step is short-circuited when ``JOBAPPLY_LATEX_API_DISABLE`` is
-truthy. These tests cover each branch by monkeypatching the inner
+The remote step only runs when ``JOBAPPLY_LATEX_API_DISABLE`` is explicitly
+falsy ("0"); unset means disabled. These tests cover each branch by monkeypatching the inner
 ``_tex_to_pdf_*`` helpers; an additional test exercises the real HTTP code
 path against a fake ``httpx.post`` so we know the request payload, response
 parsing, and PDF write all work end-to-end without the network.
@@ -31,7 +31,23 @@ def tex_file(tmp_path: Path) -> Path:
 
 
 def _enable_remote(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("JOBAPPLY_LATEX_API_DISABLE", "0")
+
+
+def test_remote_api_is_off_when_env_unset(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, tex_file: Path
+) -> None:
+    """Fail closed: without explicit opt-in, resume content is never uploaded."""
     monkeypatch.delenv("JOBAPPLY_LATEX_API_DISABLE", raising=False)
+
+    def boom(*_a: Any, **_k: Any) -> None:
+        raise AssertionError("remote LaTeX API must not be called by default")
+
+    monkeypatch.setattr(render, "_tex_to_pdf_remote", boom)
+    monkeypatch.setattr(render, "_tex_to_pdf_tectonic", lambda *_a: None)
+    monkeypatch.setattr(render, "_tex_to_pdf_pdflatex", lambda *_a: None)
+    assert render.tex_to_pdf(tex_file, tmp_path) is None
+    assert render.probe_tex_pdf_backend() != "latex-on-http"
 
 
 def _disable_remote(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -228,3 +244,46 @@ def test_remote_helper_returns_none_on_network_error(
 
     monkeypatch.setattr(httpx, "post", boom)
     assert render._tex_to_pdf_remote(tex_file, tmp_path) is None
+
+
+def test_pdflatex_runs_hardened(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """User-editable .tex must not get shell escape or arbitrary file reads."""
+    import subprocess
+
+    tex = tmp_path / "resume.tex"
+    tex.write_text("x", encoding="utf-8")
+    seen: dict[str, Any] = {}
+
+    def fake_run(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        seen["cmd"], seen["env"] = cmd, kwargs["env"]
+        (tmp_path / "resume.pdf").write_bytes(b"%PDF")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(render.shutil, "which", lambda _n: "/usr/bin/pdflatex")
+    monkeypatch.setattr(render.subprocess, "run", fake_run)
+    assert render._tex_to_pdf_pdflatex(tex, tmp_path) == tmp_path / "resume.pdf"
+    assert "-no-shell-escape" in seen["cmd"]
+    assert seen["env"]["openin_any"] == "p"
+    assert seen["env"]["openout_any"] == "p"
+    assert seen["env"]["TEXMFOUTPUT"] == str(tmp_path.resolve())
+
+
+@pytest.mark.skipif(__import__("shutil").which("pdflatex") is None, reason="pdflatex not installed")
+def test_pdflatex_cannot_embed_files_outside_job_dir(tmp_path: Path) -> None:
+    """Real-engine check: \\input of an absolute path outside the job dir fails."""
+    secret = tmp_path / "secret.txt"
+    secret.write_text("SECRETTOKEN123", encoding="utf-8")
+    job = tmp_path / "job"
+    job.mkdir()
+    tex = job / "evil.tex"
+    tex.write_text(
+        "\\documentclass{article}\\begin{document}" f"\\input{{{secret}}}" "\\end{document}\n",
+        encoding="utf-8",
+    )
+    assert render._tex_to_pdf_pdflatex(tex, job) is None
+
+    ok = job / "ok.tex"
+    ok.write_text(
+        "\\documentclass{article}\\begin{document}hello\\end{document}\n", encoding="utf-8"
+    )
+    assert render._tex_to_pdf_pdflatex(ok, job) == job / "ok.pdf"

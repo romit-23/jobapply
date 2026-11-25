@@ -155,7 +155,9 @@ def app_factory(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
                 cwd=tmp_path,
                 workspace_path=tmp_path / "ws",
                 task_manager=manager,
-            )
+            ),
+            base_url="http://127.0.0.1",
+            headers={"X-JobApply-Client": "test"},
         )
         return client, tmp_path, manager
 
@@ -925,3 +927,43 @@ def test_compile_artifact_400_for_non_compilable_filename(
     resp = client.post("/api/jobs/edit1/artifacts/resume.md/compile")
     assert resp.status_code == 400
     assert "not be compiled" in resp.json()["detail"] or "compilable" in resp.json()["detail"]
+
+
+# --------------------------- Security guards --------------------------- #
+
+
+def test_rejects_non_loopback_host_header(app_factory: Any) -> None:
+    """DNS rebinding: evil.example resolving to 127.0.0.1 must be refused."""
+    client, _, _ = app_factory()
+    resp = client.get("/api/profile", headers={"Host": "evil.example"})
+    assert resp.status_code == 400
+
+
+def test_allows_localhost_host_header(app_factory: Any) -> None:
+    client, _, _ = app_factory()
+    resp = client.get("/api/status", headers={"Host": "localhost:8000"})
+    assert resp.status_code == 200
+
+
+def test_state_changing_request_requires_csrf_header(app_factory: Any) -> None:
+    client, _, _ = app_factory()
+    del client.headers["X-JobApply-Client"]
+    resp = client.post("/api/tasks/nope/cancel")
+    assert resp.status_code == 403
+    assert "X-JobApply-Client" in resp.json()["detail"]
+    # Reads stay header-free so <iframe>/<a> artifact links keep working.
+    assert client.get("/api/status").status_code == 200
+
+
+def test_cross_origin_post_rejected_even_with_header(app_factory: Any) -> None:
+    client, _, _ = app_factory()
+    resp = client.post("/api/tasks/nope/cancel", headers={"Origin": "https://evil.example"})
+    assert resp.status_code == 403
+
+
+def test_same_origin_and_dev_origin_posts_pass_guard(app_factory: Any) -> None:
+    client, _, _ = app_factory()
+    for origin in ("http://127.0.0.1", "http://localhost:5173"):
+        resp = client.post("/api/tasks/nope/cancel", headers={"Origin": origin})
+        # Guard passed; the route itself answers for the unknown task.
+        assert resp.status_code != 403, origin

@@ -97,12 +97,13 @@ model = "openai/gpt-4o-mini"
 
 
 # --- LaTeX → PDF compile service -------------------------------------------
-# By default jobapply POSTs your tailored .tex to a hosted latex-on-http
-# instance and writes the returned PDF — no local TeX install required.
-# Local engines (`tectonic`, `pdflatex`) are still used as fallbacks if
-# the API is unreachable or disabled.
+# OPT-IN. When enabled, jobapply POSTs your tailored .tex — which contains
+# your resume and cover letter — to a latex-on-http instance and writes the
+# returned PDF, so no local TeX install is required. Disabled by default:
+# local engines (`tectonic`, `pdflatex`) are used instead, and Markdown
+# PDFs are always produced either way.
 #
-# To self-host (recommended for privacy / reliability):
+# To keep data local and still skip a TeX install, self-host it:
 #   docker run -d -p 8080:8080 yotools/latex-on-http
 # then set `url = "http://localhost:8080/builds/sync"` below.
 #
@@ -111,7 +112,7 @@ model = "openai/gpt-4o-mini"
 #   JOBAPPLY_LATEX_API_COMPILER, JOBAPPLY_LATEX_API_TIMEOUT
 
 [latex_api]
-enabled = true
+enabled = false
 url = "https://latex.ytotech.com/builds/sync"
 # Engine the API runs: pdflatex | xelatex | lualatex | latexmk
 compiler = "pdflatex"
