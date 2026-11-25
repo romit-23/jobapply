@@ -20,7 +20,7 @@ export default function Layout() {
   // Mounted at the layout level so polling continues across page
   // navigations — when the user clicks Tailor and then jumps back to
   // the dashboard, the task tracker keeps the JobCard in sync.
-  const active = useActiveTasks();
+  const active = useActiveTasks({ invalidateOnFinish: true });
   const total = status.data?.workspace_total_jobs ?? 0;
 
   return (

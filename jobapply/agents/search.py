@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterator
 from typing import Any, cast
 
@@ -53,6 +54,50 @@ def _scrape_once(
     return cast(list[dict[str, Any]], list(raw))
 
 
+_MISSING = {"", "nan", "none", "<na>", "nat"}
+
+
+def _text(value: Any) -> str:
+    """JobSpy returns a pandas frame, so missing cells arrive as float NaN
+    (or pd.NA / NaT). ``str(value or "")`` turned those into the literal
+    company / URL "nan"; map every missing marker to ""."""
+    if value is None:
+        return ""
+    if isinstance(value, float) and math.isnan(value):
+        return ""
+    text = str(value).strip()
+    return "" if text.lower() in _MISSING else text
+
+
+def _looks_remote(d: dict[str, Any]) -> bool:
+    """Whether a JobSpy row is a remote role.
+
+    Indeed ignores ``is_remote`` whenever ``hours_old`` is set and LinkedIn
+    ignores it entirely, so the query flag alone returns on-site jobs. Trust
+    JobSpy's per-row ``is_remote`` and fall back to the location text.
+    """
+    flag = d.get("is_remote")
+    if flag is True or _text(flag).lower() == "true":
+        return True
+    return "remote" in _text(d.get("location")).lower()
+
+
+_REMOTE_ALIASES = {"remote", "anywhere", "worldwide", "remote only", "fully remote"}
+
+
+def _normalize_location(location: str | None, remote: bool) -> tuple[str | None, bool]:
+    """Treat a location of just "Remote"/"Anywhere" as the remote filter.
+
+    Job boards geocode the location string, so "Remote" is either ignored
+    (LinkedIn returned Stockholm/London/NYC on-site roles in testing) or
+    misread as a place. JobSpy's ``is_remote`` flag is the real filter.
+    """
+    loc = (location or "").strip()
+    if loc.lower() in _REMOTE_ALIASES:
+        return None, True
+    return (loc or None), remote
+
+
 def iter_search_jobs(inp: JobSearchInput) -> Iterator[RawJob]:
     """Stream JobSpy hits as they arrive, deduped by stable job_id.
 
@@ -65,6 +110,7 @@ def iter_search_jobs(inp: JobSearchInput) -> Iterator[RawJob]:
     """
     site_name = inp.site_names or ["indeed", "linkedin", "google"]
     skills_q = " ".join(inp.skills) if inp.skills else ""
+    location, is_remote = _normalize_location(inp.location, inp.remote)
     seen: set[str] = set()
     yielded = 0
     per_title = max(5, min(inp.results_wanted, 200 // max(1, len(inp.titles))))
@@ -74,32 +120,34 @@ def iter_search_jobs(inp: JobSearchInput) -> Iterator[RawJob]:
         rows = _scrape_once(
             site_name=site_name,
             search_term=term,
-            location=inp.location,
+            location=location,
             results_wanted=per_title,
             hours_old=inp.hours_old,
-            is_remote=inp.remote,
+            is_remote=is_remote,
             linkedin_fetch_description=inp.linkedin_fetch_description,
         )
         for row in rows:
             d = _row_to_dict(row)
-            title_s = str(d.get("title") or "")
-            company = str(d.get("company") or "")
-            location_s = str(d.get("location") or "")
-            site = str(d.get("site") or "")
-            job_url = d.get("job_url") or d.get("url")
-            apply_url = d.get("job_url_apply") or d.get("apply_url") or job_url
+            if is_remote and not _looks_remote(d):
+                continue
+            title_s = _text(d.get("title"))
+            company = _text(d.get("company"))
+            location_s = _text(d.get("location"))
+            site = _text(d.get("site"))
+            job_url = _text(d.get("job_url")) or _text(d.get("url"))
+            apply_url = _text(d.get("job_url_apply")) or _text(d.get("apply_url")) or job_url
             jid = stable_job_id(
                 site=site,
                 company=company,
                 title=title_s,
                 location=location_s,
-                apply_url=str(apply_url) if apply_url else None,
-                job_url=str(job_url) if job_url else None,
+                apply_url=apply_url or None,
+                job_url=job_url or None,
             )
             if jid in seen:
                 continue
             seen.add(jid)
-            description = str(d.get("description") or "")
+            description = _text(d.get("description"))
             # Pull recipient email + subject-line / instruction hints
             # out of the JD body so downstream `--with-email` can
             # pre-fill `--email-to` / `--email-context` instead of
@@ -111,10 +159,10 @@ def iter_search_jobs(inp: JobSearchInput) -> Iterator[RawJob]:
                 company=company,
                 location=location_s,
                 description=description,
-                job_url=str(job_url) if job_url else None,
-                apply_url=str(apply_url) if apply_url else None,
+                job_url=job_url or None,
+                apply_url=apply_url or None,
                 site=site,
-                date_posted=str(d.get("date")) if d.get("date") else None,
+                date_posted=_text(d.get("date_posted")) or _text(d.get("date")) or None,
                 application=hints if hints.has_any else None,
                 raw=d,
             )

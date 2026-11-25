@@ -36,7 +36,6 @@ from jobapply.models import (
     RawJob,
 )
 from jobapply.nodes.persist import upsert_job_record, write_job_json
-from jobapply.profile import Profile, ProfileLoadError, load_profile
 from jobapply.nodes.render import (
     fill_cover_letter_tex,
     fill_resume_tex,
@@ -46,7 +45,13 @@ from jobapply.nodes.render import (
     slug_from_paths,
     tex_to_pdf,
 )
-from jobapply.profile import load_profile, profile_skill_list, profile_to_text
+from jobapply.profile import (
+    Profile,
+    ProfileLoadError,
+    load_profile,
+    profile_skill_list,
+    profile_to_text,
+)
 from jobapply.run_meta import read_meta, write_meta
 from jobapply.utils import profile_hash as profile_hash_fn
 from jobapply.utils import slugify

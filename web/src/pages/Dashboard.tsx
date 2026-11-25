@@ -8,6 +8,7 @@ import TailorModal, {
 } from "@/components/TailorModal";
 import TaskProgress from "@/components/TaskProgress";
 import {
+  useActiveTasks,
   useJobs,
   useStartRun,
   useStatus,
@@ -33,6 +34,11 @@ export default function Dashboard() {
   const [sort, setSort] = useState<SortOrder>("fit");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [searchTask, setSearchTask] = useState<TaskRecord | null>(null);
+  // Any search still running (including one started in another tab or
+  // before a page reload) keeps the Search button disabled so a
+  // double-click can't kick off duplicate JobSpy scrapes.
+  const activeTasks = useActiveTasks();
+  const searchRunning = activeTasks.all.some((t) => t.kind === "search");
   const [runTask, setRunTask] = useState<TaskRecord | null>(null);
   const [tailorOpen, setTailorOpen] = useState(false);
   const startRun = useStartRun();
@@ -147,7 +153,10 @@ export default function Dashboard() {
         </div>
       ) : null}
 
-      <SearchForm onTaskStarted={(t) => setSearchTask(t)} />
+      <SearchForm
+        onTaskStarted={(t) => setSearchTask(t)}
+        busy={searchRunning}
+      />
 
       {searchTask ? (
         <TaskProgress

@@ -8,6 +8,7 @@ import {
   useTaskPoll,
 } from "@/lib/hooks";
 import type { EmailDraft } from "@/lib/types";
+import { useDialog } from "@/lib/useDialog";
 
 interface Props {
   jobId: string;
@@ -74,6 +75,8 @@ export default function EmailModal({
     if (live.task) setTaskId(live.task.task_id);
   }, [open, live.task, taskId]);
 
+  const dialogRef = useDialog<HTMLDivElement>(open, onClose);
+
   if (!open) return null;
   const draft = task?.result as EmailDraft | undefined;
   const meta = providers.data?.providers.find((p) => p.name === provider);
@@ -96,9 +99,18 @@ export default function EmailModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm">
-      <div className="card w-full max-w-2xl space-y-4 border-slate-700 p-6">
-        <div className="flex items-center gap-2 text-base font-semibold text-slate-100">
-          <Mail size={18} className="text-brand-400" />
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="email-modal-title"
+        className="card w-full max-w-2xl space-y-4 border-slate-700 p-6"
+      >
+        <div
+          id="email-modal-title"
+          className="flex items-center gap-2 text-base font-semibold text-slate-100"
+        >
+          <Mail size={18} className="text-brand-400" aria-hidden="true" />
           Draft application email
           <button
             className="ml-auto text-slate-400 hover:text-slate-100"
@@ -277,6 +289,14 @@ export default function EmailModal({
                 {draft.body}
               </pre>
             </div>
+            {isTailored ? (
+              <p className="text-xs text-slate-400">
+                Mail links can&apos;t attach files. Attach{" "}
+                <code className="font-mono">resume.pdf</code> and{" "}
+                <code className="font-mono">cover_letter.pdf</code> yourself
+                (Download them from the job page).
+              </p>
+            ) : null}
             <div className="flex flex-wrap items-center justify-end gap-2">
               <button
                 className="btn-secondary"

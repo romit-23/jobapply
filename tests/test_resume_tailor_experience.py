@@ -20,11 +20,11 @@ from typing import Any
 
 from jobapply.agents import resume_tailor as rt_module
 from jobapply.agents.resume_tailor import (
-    _TailoredBullets,
     _experience_from_profile,
     _pair_experience,
     _pair_projects,
     _projects_from_profile,
+    _TailoredBullets,
     tailor_resume,
 )
 from jobapply.models import RawJob
@@ -34,7 +34,6 @@ from jobapply.profile import (
     ProfileExperience,
     ProfileProject,
 )
-
 
 _PROFILE_TEXT = (
     "# Profile\n"

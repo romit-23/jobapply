@@ -9,9 +9,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-ProviderName = Literal[
-    "gemini", "anthropic", "openai", "ollama", "cloudflare", "openrouter"
-]
+ProviderName = Literal["gemini", "anthropic", "openai", "ollama", "cloudflare", "openrouter"]
 PROVIDER_NAMES: tuple[ProviderName, ...] = (
     "gemini",
     "anthropic",
@@ -22,8 +20,8 @@ PROVIDER_NAMES: tuple[ProviderName, ...] = (
 )
 
 DEFAULT_MODELS: dict[str, str] = {
-    "gemini": "gemini-2.0-flash",
-    "anthropic": "claude-3-5-haiku-latest",
+    "gemini": "gemini-flash-latest",
+    "anthropic": "claude-haiku-5-5",
     "openai": "gpt-4o-mini",
     "ollama": "llama3.1",
     # Workers AI's OpenAI-compatible endpoint accepts any model id from
@@ -117,18 +115,22 @@ class ProviderConfig(BaseModel):
 class LatexApiConfig(BaseModel):
     """Settings for the LaTeX → PDF compile service.
 
-    The pipeline POSTs ``.tex`` content to a `latex-on-http`_ compatible
-    endpoint and writes the returned PDF bytes to disk. This avoids needing
-    a TeX installation on the runner. Local engines (``tectonic``,
-    ``pdflatex``) are still used as fallbacks when this is disabled or
-    unreachable.
+    When enabled, the pipeline POSTs ``.tex`` content (which contains the
+    candidate's resume / cover letter) to a `latex-on-http`_ compatible
+    endpoint and writes the returned PDF bytes to disk. **Disabled by
+    default** so personal data never leaves the machine unless the user
+    opts in; local engines (``tectonic``, ``pdflatex``) are used instead,
+    and are also the fallback when the API is unreachable.
 
     .. _latex-on-http: https://github.com/YtoTech/latex-on-http
     """
 
     enabled: bool = Field(
-        True,
-        description="Try the remote LaTeX API before falling back to local engines.",
+        False,
+        description=(
+            "Opt-in: send .tex (resume content) to the remote LaTeX API before "
+            "falling back to local engines."
+        ),
     )
     url: str = Field(
         DEFAULT_LATEX_API_URL,

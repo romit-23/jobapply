@@ -85,7 +85,7 @@ Outputs per run:
   <img src="assets/jobapply-feature-output.png" alt="PDFs, CSV, JSON — ready to apply." width="90%" />
 </p>
 
-PDFs are always produced. Markdown PDFs go through a three-tier fallback (`pandoc` → `weasyprint` → `fpdf2`); install pandoc or `pango` for nicer output. The styled LaTeX PDFs (`resume.pdf`, `cover_letter.pdf` rendered from the bundled LaTeX templates) are compiled via a remote [`latex-on-http`](https://github.com/YtoTech/latex-on-http) service by default, so no local TeX install is required — `tectonic` / `pdflatex` are still used as fallbacks if the API is disabled or unreachable.
+PDFs are always produced. Markdown PDFs go through a three-tier fallback (`pandoc` → `weasyprint` → `fpdf2`); install pandoc or `pango` for nicer output. The styled LaTeX PDFs (`resume.pdf`, `cover_letter.pdf` rendered from the bundled LaTeX templates) are compiled locally with `tectonic` / `pdflatex`. Compiling through a remote [`latex-on-http`](https://github.com/YtoTech/latex-on-http) service (no TeX install needed) is opt-in, because it uploads your resume content.
 
 **Deduping & resume**
 
@@ -277,7 +277,7 @@ model   = "gpt-4o-mini"
 
 [providers.anthropic]
 api_key = "env:ANTHROPIC_API_KEY"
-model   = "claude-3-5-haiku-latest"
+model   = "claude-haiku-5-5"
 
 [providers.cloudflare]
 api_key    = "env:CLOUDFLARE_API_TOKEN"
@@ -314,7 +314,7 @@ Resumes and cover letters are always exported as PDFs through two independent pi
 
 ```text
 Markdown PDF backend: weasyprint (good)
-LaTeX PDF backend:    latex-on-http (https://latex.ytotech.com/builds/sync)
+LaTeX PDF backend:    tectonic (local)
 ```
 
 #### Markdown → PDF (always available)
@@ -327,21 +327,23 @@ Markdown copies of the resume and cover letter (`resume.md`, `cover_letter.md`) 
 | 2 | [WeasyPrint](https://weasyprint.org/) | good HTML/CSS | `brew install pango` (Python deps installed automatically) |
 | 3 | [`fpdf2`](https://py-pdf.github.io/fpdf2/) | basic, pure Python | bundled — always works |
 
-#### LaTeX → PDF (no local TeX needed)
+#### LaTeX → PDF (local by default, remote opt-in)
 
-The styled MTeck-themed LaTeX templates (`resume.tex`, `cover_letter.tex`) are compiled to PDF via a [`latex-on-http`](https://github.com/YtoTech/latex-on-http) HTTP API. By default `jobapply` POSTs the `.tex` content to the public instance at `latex.ytotech.com` and writes the returned PDF — **no Tectonic, MacTeX, or `pdflatex` install required**. Local engines are still tried as fallbacks.
+The styled MTeck-themed LaTeX templates (`resume.tex`, `cover_letter.tex`) are compiled locally with Tectonic or `pdflatex`. If neither is installed you still get the Markdown PDFs above.
+
+Optionally, you can compile through a [`latex-on-http`](https://github.com/YtoTech/latex-on-http) HTTP API instead, so no TeX install is needed. **This is off by default because it uploads your tailored `.tex`, i.e. your resume and cover letter content.** `jobapply init` asks whether to enable the public instance at `latex.ytotech.com`; self-hosting it (below) keeps everything local.
 
 | Tier | Backend | Notes |
 |------|---------|-------|
-| 1 | [`latex-on-http`](https://github.com/YtoTech/latex-on-http) (remote) | Default. Configurable in `[latex_api]`; supports self-hosting (see below). |
-| 2 | [Tectonic](https://tectonic-typesetting.github.io/) | Used when API is disabled / unreachable. Auto-fetches missing TeX packages. |
-| 3 | `pdflatex` | Last-resort fallback (full TeX Live install). |
+| 1 | [`latex-on-http`](https://github.com/YtoTech/latex-on-http) (remote) | **Opt-in** via `[latex_api] enabled = true`; supports self-hosting (see below). |
+| 2 | [Tectonic](https://tectonic-typesetting.github.io/) | Default. Auto-fetches missing TeX packages. |
+| 3 | `pdflatex` | Fallback (full TeX Live install). |
 
 Configure the LaTeX-PDF backend in `jobapply.toml`:
 
 ```toml
 [latex_api]
-enabled  = true
+enabled  = true          # opt-in: uploads your .tex
 url      = "https://latex.ytotech.com/builds/sync"
 compiler = "pdflatex"   # pdflatex | xelatex | lualatex | latexmk
 timeout  = 120.0
@@ -349,12 +351,13 @@ timeout  = 120.0
 
 Each setting can also be overridden at runtime via env vars: `JOBAPPLY_LATEX_API_URL`, `JOBAPPLY_LATEX_API_DISABLE`, `JOBAPPLY_LATEX_API_COMPILER`, `JOBAPPLY_LATEX_API_TIMEOUT` (env wins over TOML so shell overrides are non-destructive).
 
-**Self-host (recommended for privacy / reliability).** Your tailored `.tex` contains personal info; if you'd rather not send it to a third-party server, run the same image yourself:
+**Self-host (recommended if you want the API).** Your tailored `.tex` contains personal info; to get API compilation without sending it to a third-party server, run the same image yourself:
 
 ```bash
 docker run -d -p 8080:8080 yotools/latex-on-http
 # then in jobapply.toml:
 # [latex_api]
+# enabled = true
 # url = "http://localhost:8080/builds/sync"
 ```
 
@@ -631,7 +634,7 @@ output/tailor-<timestamp>/<slug>/
 └── email.txt               # only when --with-email; To / Subject / body, ready to paste
 ```
 
-> **PDF backend precedence.** Both pipelines write to the same `resume.pdf` / `cover_letter.pdf`: the Markdown→PDF backend (pandoc / weasyprint / fpdf2) runs first, and if the LaTeX→PDF backend (latex-on-http / tectonic / pdflatex) succeeds it overwrites the file with the styled MTeck-themed render. If you want only the Markdown render, disable the LaTeX backend with `JOBAPPLY_LATEX_API_DISABLE=1` (and keep `tectonic` / `pdflatex` off `$PATH`).
+> **PDF backend precedence.** Both pipelines write to the same `resume.pdf` / `cover_letter.pdf`: the Markdown→PDF backend (pandoc / weasyprint / fpdf2) runs first, and if the LaTeX→PDF backend (latex-on-http / tectonic / pdflatex) succeeds it overwrites the file with the styled MTeck-themed render. If you want only the Markdown render, leave `[latex_api]` disabled (the default) and keep `tectonic` / `pdflatex` off `$PATH`.
 
 ## Architecture
 

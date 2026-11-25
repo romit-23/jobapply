@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 import re
 import shutil
@@ -299,9 +300,7 @@ def _education_latex(education: list[EducationItem]) -> str:
         school_label = e.school
         if e.location.strip():
             school_label = (
-                f"{e.school}, {e.location.strip()}"
-                if e.school.strip()
-                else e.location.strip()
+                f"{e.school}, {e.location.strip()}" if e.school.strip() else e.location.strip()
             )
         parts.append(rf"\headingBf{{{latex_escape(school_label)}}}{{{latex_escape(e.dates)}}}")
         right = ""
@@ -366,27 +365,42 @@ def _cover_left_block(c: ContactInfo) -> str:
 
 
 def _cover_right_block(c: ContactInfo) -> str:
-    """Right-aligned LinkedIn / Portfolio / GitHub / Medium / Twitter links."""
+    """Right-aligned LinkedIn / Portfolio / GitHub / Medium / Twitter links.
+
+    The visible text is the handle (or portfolio host), not a generic
+    "link": cover letters get printed and read on paper, where only the
+    text survives.
+    """
+
+    def _handle(label: str) -> str:
+        # "linkedin/jane" -> "jane", "medium/@jane" -> "@jane"
+        return label.split("/", 1)[1] if "/" in label else label
+
+    def _line(name: str, href: str, text: str) -> str:
+        return f"{name}: \\href{{{_url_escape(href)}}}{{{latex_escape(text)}}}"
+
     lines: list[str] = []
     if c.linkedin:
-        href, _ = _normalize_via_regex(
+        href, label = _normalize_via_regex(
             c.linkedin, _LINKEDIN_RE, "https://linkedin.com/in/", "linkedin"
         )
-        lines.append(f"LinkedIn: \\href{{{_url_escape(href)}}}{{link}}")
+        lines.append(_line("LinkedIn", href, _handle(label)))
     if c.portfolio:
-        href, _ = _normalize_portfolio(c.portfolio)
-        lines.append(f"Portfolio: \\href{{{_url_escape(href)}}}{{link}}")
+        href, label = _normalize_portfolio(c.portfolio)
+        lines.append(_line("Portfolio", href, label))
     if c.github:
-        href, _ = _normalize_via_regex(c.github, _GITHUB_RE, "https://github.com/", "github")
-        lines.append(f"GitHub: \\href{{{_url_escape(href)}}}{{link}}")
+        href, label = _normalize_via_regex(c.github, _GITHUB_RE, "https://github.com/", "github")
+        lines.append(_line("GitHub", href, _handle(label)))
     if c.medium:
-        href, _ = _normalize_via_regex(
+        href, label = _normalize_via_regex(
             c.medium, _MEDIUM_RE, "https://medium.com/@", "medium", keep_at_in_label=True
         )
-        lines.append(f"Medium: \\href{{{_url_escape(href)}}}{{link}}")
+        lines.append(_line("Medium", href, _handle(label)))
     if c.twitter:
-        href, _ = _normalize_via_regex(c.twitter, _TWITTER_RE, "https://twitter.com/", "twitter")
-        lines.append(f"Twitter: \\href{{{_url_escape(href)}}}{{link}}")
+        href, label = _normalize_via_regex(
+            c.twitter, _TWITTER_RE, "https://twitter.com/", "twitter"
+        )
+        lines.append(_line("Twitter", href, _handle(label)))
     return " \\\\\n".join(lines)
 
 
@@ -682,11 +696,13 @@ def probe_md_pdf_backend() -> str:
 # --- LaTeX → PDF ----------------------------------------------------------- #
 #
 # Strategy (in order):
-#   1. Remote latex-on-http API — no local TeX install needed.
+#   1. Remote latex-on-http API — OPT-IN (it uploads resume content).
 #      Configurable via env vars so deployments and CI pick up overrides
 #      without touching the rendering layer:
 #        JOBAPPLY_LATEX_API_URL       (defaults to the public ytotech.com instance)
-#        JOBAPPLY_LATEX_API_DISABLE   (set to "1" to skip the remote step entirely)
+#        JOBAPPLY_LATEX_API_DISABLE   (remote step runs only when this is
+#                                      explicitly "0"/"false"/"no"/"off";
+#                                      unset means disabled)
 #        JOBAPPLY_LATEX_API_COMPILER  (pdflatex | xelatex | lualatex | latexmk)
 #        JOBAPPLY_LATEX_API_TIMEOUT   (seconds)
 #   2. Local `tectonic`  — auto-fetches missing packages, single binary.
@@ -697,12 +713,15 @@ def probe_md_pdf_backend() -> str:
 
 DEFAULT_LATEX_API_URL = "https://latex.ytotech.com/builds/sync"
 DEFAULT_LATEX_API_TIMEOUT = 120.0
-_LATEX_DISABLED_VALUES = {"1", "true", "yes", "on"}
+_LATEX_ENABLED_VALUES = {"0", "false", "no", "off"}
 
 
 def _latex_api_disabled() -> bool:
+    # Fail closed: the remote API receives resume content, so it only runs
+    # when explicitly enabled (``apply_latex_api_env`` writes "0" when the
+    # user opted in via ``[latex_api] enabled = true``).
     raw = os.environ.get("JOBAPPLY_LATEX_API_DISABLE", "").strip().lower()
-    return raw in _LATEX_DISABLED_VALUES
+    return raw not in _LATEX_ENABLED_VALUES
 
 
 def _latex_api_url() -> str:
@@ -789,18 +808,85 @@ def _tex_to_pdf_pdflatex(tex_path: Path, out_dir: Path) -> Path | None:
     pdflatex = shutil.which("pdflatex")
     if not pdflatex:
         return None
+    # The .tex may have been edited in the web UI, so treat it as untrusted:
+    # no shell escape, and kpathsea "paranoid" mode so \input{/abs/path}
+    # can't embed arbitrary local files (e.g. ~/.ssh keys) into the PDF.
+    # TEXMFOUTPUT whitelists the job dir, which holds the .tex itself.
+    env = {
+        **os.environ,
+        "openin_any": "p",
+        "openout_any": "p",
+        "TEXMFOUTPUT": str(out_dir.resolve()),
+    }
     try:
         proc = subprocess.run(
-            [pdflatex, "-interaction=nonstopmode", f"-output-directory={out_dir}", str(tex_path)],
+            [
+                pdflatex,
+                "-no-shell-escape",
+                "-interaction=nonstopmode",
+                f"-output-directory={out_dir}",
+                str(tex_path),
+            ],
             capture_output=True,
             text=True,
             timeout=120,
+            env=env,
         )
     except (OSError, subprocess.TimeoutExpired):
         return None
     if proc.returncode != 0:
+        # Keep <stem>.log: latex_log_errors() turns it into a readable
+        # message for the editor.
         return None
+    _remove_latex_byproducts(out_dir, tex_path.stem)
     return out_dir / (tex_path.stem + ".pdf")
+
+
+_LATEX_BYPRODUCTS = (".aux", ".out", ".log", ".toc", ".fls", ".fdb_latexmk")
+
+
+def _remove_latex_byproducts(out_dir: Path, stem: str) -> None:
+    """Delete pdflatex scratch files after a successful build so job
+    folders only hold the artifacts users care about."""
+    for ext in _LATEX_BYPRODUCTS:
+        with contextlib.suppress(OSError):
+            (out_dir / f"{stem}{ext}").unlink(missing_ok=True)
+
+
+def latex_log_errors(log_path: Path, *, max_errors: int = 1) -> str | None:
+    """Summarise the errors in a TeX ``.log`` file.
+
+    Returns the first error (TeX's later errors are usually cascades) as
+    ``"Line 12: Undefined control sequence. (near: \\foo)"`` plus a count of
+    the rest, or ``None`` when the log is missing or has no ``!`` lines.
+    """
+    try:
+        lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return None
+    errors: list[str] = []
+    for i, line in enumerate(lines):
+        if not line.startswith("! "):
+            continue
+        message = line[2:].strip()
+        where = ""
+        for follow in lines[i + 1 : i + 12]:
+            m = re.match(r"l\.(\d+)\s?(.*)", follow)
+            if m:
+                where = f"Line {m.group(1)}: "
+                context = m.group(2).strip()
+                if context:
+                    message = f"{message} (near: {context[-60:]})"
+                break
+        errors.append(f"{where}{message}")
+    if not errors:
+        return None
+    shown = errors[:max_errors]
+    extra = len(errors) - len(shown)
+    if extra:
+        # Later TeX errors are almost always fallout from the first one.
+        shown.append(f"(+{extra} more, usually caused by the first)")
+    return "\n".join(shown)
 
 
 def tex_to_pdf(tex_path: Path, out_dir: Path) -> Path | None:

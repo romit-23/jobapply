@@ -14,6 +14,7 @@ the same way.
 
 from __future__ import annotations
 
+import contextlib
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -278,15 +279,13 @@ def _load_job_from_json(
     if needs_rewrite:
         if application is not None:
             data["application"] = application.model_dump(mode="json")
-        try:
+        # Best-effort: failing to persist isn't fatal — the
+        # tailor run still gets the recovered text in-memory.
+        with contextlib.suppress(OSError):
             path.write_text(
                 json.dumps(data, indent=2, ensure_ascii=False),
                 encoding="utf-8",
             )
-        except OSError:
-            # Best-effort: failing to persist isn't fatal — the
-            # tailor run still gets the recovered text in-memory.
-            pass
 
     return RawJob(
         job_id=str(data.get("job_id") or ""),

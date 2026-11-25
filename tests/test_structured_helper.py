@@ -9,7 +9,8 @@ the exact sequence of ``invoke`` outcomes (raise vs. return).
 
 from __future__ import annotations
 
-from typing import Any, Callable, List
+from collections.abc import Callable
+from typing import Any
 
 import pytest
 from langchain_core.messages import BaseMessage, SystemMessage
@@ -34,7 +35,7 @@ class _ScriptedStructured:
     - a ``ValidationError`` instance to raise verbatim.
     """
 
-    def __init__(self, script: List[Any]) -> None:
+    def __init__(self, script: list[Any]) -> None:
         self._script = list(script)
         self.calls: list[list[BaseMessage]] = []
 
@@ -89,9 +90,7 @@ def test_invoke_structured_recovers_from_single_element_list() -> None:
     structured = _ScriptedStructured([err])
     llm = _FakeLLM(structured)
 
-    out = invoke_structured(
-        llm, _Doc, [SystemMessage(content="x")], max_retries=2
-    )
+    out = invoke_structured(llm, _Doc, [SystemMessage(content="x")], max_retries=2)
 
     assert out == _Doc(header="h", body="b")
     # Only the original call — no retry needed because we recovered
@@ -103,14 +102,10 @@ def test_invoke_structured_retries_with_corrective_message() -> None:
     """When the failing input can't be unwrapped (random scalar),
     the helper must retry with a corrective system message."""
     err = _validation_error_for(_Doc, [2026.05, 10])
-    structured = _ScriptedStructured(
-        [err, _Doc(header="recovered", body="ok")]
-    )
+    structured = _ScriptedStructured([err, _Doc(header="recovered", body="ok")])
     llm = _FakeLLM(structured)
 
-    out = invoke_structured(
-        llm, _Doc, [SystemMessage(content="initial")], max_retries=2
-    )
+    out = invoke_structured(llm, _Doc, [SystemMessage(content="initial")], max_retries=2)
 
     assert out == _Doc(header="recovered", body="ok")
     assert len(structured.calls) == 2
@@ -133,9 +128,7 @@ def test_invoke_structured_raises_after_exhausting_retries() -> None:
     llm = _FakeLLM(structured)
 
     with pytest.raises(ValidationError):
-        invoke_structured(
-            llm, _Doc, [SystemMessage(content="initial")], max_retries=1
-        )
+        invoke_structured(llm, _Doc, [SystemMessage(content="initial")], max_retries=1)
 
     assert len(structured.calls) == 2
 

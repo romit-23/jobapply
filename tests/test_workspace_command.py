@@ -40,11 +40,11 @@ def _raw(jid: str, *, title: str = "ML Engineer", company: str = "Acme") -> RawJ
 def _write_minimal_toml(path: Path, *, provider: str = "openai") -> None:
     path.write_text(
         f'provider = "{provider}"\n'
-        f"profile_path = \"profile.json\"\n"
+        f'profile_path = "profile.json"\n'
         f'output_dir = "output"\n'
         f"results_wanted = 5\n"
         f"hours_old = 24\n"
-        f"sites = [\"indeed\"]\n"
+        f'sites = ["indeed"]\n'
         f"[providers.{provider}]\n"
         f'api_key = "test-key"\n'
         f'model = "test-model"\n',
@@ -78,8 +78,10 @@ def test_search_workspace_creates_centralized_layout(
         app,
         [
             "search",
-            "--titles", "ML Engineer",
-            "--workspace", str(workspace),
+            "--titles",
+            "ML Engineer",
+            "--workspace",
+            str(workspace),
             "--yes",
         ],
     )
@@ -87,7 +89,9 @@ def test_search_workspace_creates_centralized_layout(
 
     # No timestamped subdir was created — the workspace itself is the
     # output directory.
-    assert not list((tmp_path / "output").glob("search-*")) if (tmp_path / "output").is_dir() else True
+    assert (
+        not list((tmp_path / "output").glob("search-*")) if (tmp_path / "output").is_dir() else True
+    )
     assert (workspace / "workspace.db").is_file()
     assert (workspace / "jobs.json").is_file()
     assert (workspace / "jobs.csv").is_file()
@@ -233,8 +237,10 @@ def test_search_workspace_with_score_persists_fit(
         app,
         [
             "search",
-            "-t", "X",
-            "-w", str(workspace),
+            "-t",
+            "X",
+            "-w",
+            str(workspace),
             "--score",
             "--yes",
         ],
@@ -359,9 +365,7 @@ def _fake_chat_model() -> Any:
                     )
                 )
             if schema.__name__ == "CoverLetter":
-                return _FakeStructured(
-                    CoverLetter(header="h", opening="o", body="b", closing="c")
-                )
+                return _FakeStructured(CoverLetter(header="h", opening="o", body="b", closing="c"))
             raise AssertionError(f"unexpected schema {schema}")
 
     return FakeChatModel()
@@ -403,9 +407,7 @@ def test_run_workspace_dedupes_already_processed_jobs(
     Workspace.open(workspace)  # init DB
     ledger = tmp_path / "ledger.db"
     profile = tmp_path / "profile.json"
-    profile.write_text(
-        '{"name": "Me", "email": "m@e.com", "skills": ["Python"]}', encoding="utf-8"
-    )
+    profile.write_text('{"name": "Me", "email": "m@e.com", "skills": ["Python"]}', encoding="utf-8")
     from jobapply.models import JobSearchInput
 
     inp = JobSearchInput(titles=["Python"], skills=["Python"], location="Remote")

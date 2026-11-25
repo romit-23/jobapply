@@ -66,11 +66,11 @@ Homepage = "https://github.com/romit-23/jobapply"
 Repository = "https://github.com/romit-23/jobapply"
 Issues = "https://github.com/romit-23/jobapply/issues"
 
+# web_dist is gitignored (built by `cd web && npm run build`). `artifacts`
+# ships it in the wheel when present without failing installs when absent.
 [tool.hatch.build.targets.wheel]
 packages = ["jobapply"]
-
-[tool.hatch.build.targets.wheel.force-include]
-"jobapply/web_dist" = "jobapply/web_dist"
+artifacts = ["jobapply/web_dist/**"]
 
 [tool.ruff]
 line-length = 100

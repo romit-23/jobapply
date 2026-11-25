@@ -1,24 +1,81 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Loader2, Search } from "lucide-react";
 import { useStartSearch, useStatus } from "@/lib/hooks";
 import type { TaskRecord } from "@/lib/types";
 
 interface Props {
   onTaskStarted: (task: TaskRecord) => void;
+  /** True while a previously started search task is still running. */
+  busy?: boolean;
+}
+
+const STORAGE_KEY = "jobapply.searchForm.v1";
+
+interface SavedForm {
+  titles: string;
+  skills: string;
+  location: string;
+  results: number | "";
+  score: boolean;
+  remote: boolean;
+  linkedin: boolean;
+  force: boolean;
+}
+
+const DEFAULTS: SavedForm = {
+  titles: "",
+  skills: "",
+  location: "",
+  results: "",
+  score: false,
+  remote: false,
+  linkedin: true,
+  force: false,
+};
+
+/** Last-used search inputs, so navigating to a job and back (or
+ *  reloading) doesn't wipe the form. */
+function loadSaved(): SavedForm {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return DEFAULTS;
+    return { ...DEFAULTS, ...(JSON.parse(raw) as Partial<SavedForm>) };
+  } catch {
+    return DEFAULTS;
+  }
 }
 
 /** Live JobSpy search form. Submits to /api/search and hands the task
  *  record back to the parent so the page can render progress. */
-export default function SearchForm({ onTaskStarted }: Props) {
+export default function SearchForm({ onTaskStarted, busy = false }: Props) {
   const status = useStatus();
-  const [titles, setTitles] = useState("");
-  const [skills, setSkills] = useState("");
-  const [location, setLocation] = useState("");
-  const [results, setResults] = useState<number | "">("");
-  const [score, setScore] = useState(false);
-  const [remote, setRemote] = useState(false);
-  const [linkedin, setLinkedin] = useState(true);
-  const [force, setForce] = useState(false);
+  const [saved] = useState(loadSaved);
+  const [titles, setTitles] = useState(saved.titles);
+  const [skills, setSkills] = useState(saved.skills);
+  const [location, setLocation] = useState(saved.location);
+  const [results, setResults] = useState<number | "">(saved.results);
+  const [score, setScore] = useState(saved.score);
+  const [remote, setRemote] = useState(saved.remote);
+  const [linkedin, setLinkedin] = useState(saved.linkedin);
+  const [force, setForce] = useState(saved.force);
+
+  useEffect(() => {
+    const form: SavedForm = {
+      titles,
+      skills,
+      location,
+      results,
+      score,
+      remote,
+      linkedin,
+      force,
+    };
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(form));
+    } catch {
+      // Storage full / disabled (private mode): persistence is best-effort.
+    }
+  }, [titles, skills, location, results, score, remote, linkedin, force]);
   const start = useStartSearch();
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -156,14 +213,15 @@ export default function SearchForm({ onTaskStarted }: Props) {
         <button
           type="submit"
           className="btn-primary"
-          disabled={start.isPending}
+          disabled={start.isPending || busy}
+          title={busy ? "A search is already running" : undefined}
         >
-          {start.isPending ? (
+          {start.isPending || busy ? (
             <Loader2 size={16} className="animate-spin" />
           ) : (
             <Search size={16} />
           )}
-          Search
+          {busy ? "Searching…" : "Search"}
         </button>
       </div>
     </form>

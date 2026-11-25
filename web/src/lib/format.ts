@@ -55,11 +55,21 @@ export function shortHostname(url: string | null | undefined): string {
   }
 }
 
+/** Parse a backend timestamp. The workspace DB (SQLite) drops timezone
+ *  info, so some timestamps arrive as naive ISO strings that are really
+ *  UTC; `new Date()` would read those as local time (e.g. "5h ago" for a
+ *  search that just ran in IST). Treat a missing offset as UTC. */
+export function parseServerDate(iso: string): Date {
+  const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(iso.trim());
+  return new Date(hasZone ? iso : `${iso}Z`);
+}
+
 export function relativeTime(iso: string | null | undefined): string {
   if (!iso) return "";
   try {
-    const t = new Date(iso).getTime();
-    const diff = Date.now() - t;
+    const t = parseServerDate(iso).getTime();
+    if (Number.isNaN(t)) return "";
+    const diff = Math.max(0, Date.now() - t);
     const sec = Math.floor(diff / 1000);
     if (sec < 60) return `${sec}s ago`;
     const min = Math.floor(sec / 60);

@@ -348,9 +348,11 @@ function StatusFooter({
   return (
     <div className="flex-shrink-0 border-t border-slate-800 px-3 py-2 text-xs">
       {compileError ? (
-        <div className="flex items-start gap-2 text-rose-300">
+        <div className="flex items-start gap-2 text-rose-300" role="alert">
           <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" />
-          <span>{compileError.message}</span>
+          <span className="whitespace-pre-line font-mono">
+            {compileError.message}
+          </span>
         </div>
       ) : compileSuccess ? (
         <div className="flex items-center gap-2 text-brand-300">

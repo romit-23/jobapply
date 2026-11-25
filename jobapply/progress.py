@@ -49,10 +49,9 @@ def stream_run(
                         completed = len(results)
                         total_known = True
                         progress.update(task, total=total, completed=completed)
-                    elif node == "process_one" and total_known:
-                        if payload.get("results"):
-                            completed += 1
-                            progress.update(task, completed=completed)
+                    elif node == "process_one" and total_known and payload.get("results"):
+                        completed += 1
+                        progress.update(task, completed=completed)
                 desc = node
                 if desc != last_desc:
                     progress.update(task, description=desc)

@@ -28,6 +28,8 @@ async function request<T>(
   init?: RequestInit & { json?: unknown },
 ): Promise<T> {
   const headers = new Headers(init?.headers);
+  // Required by the server's CSRF guard on POST/PUT/DELETE; harmless on GET.
+  headers.set("X-JobApply-Client", "web");
   let body: BodyInit | null | undefined = init?.body ?? null;
   if (init?.json !== undefined) {
     headers.set("Content-Type", "application/json");
